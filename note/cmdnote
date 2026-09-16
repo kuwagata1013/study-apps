@@ -1,0 +1,6 @@
+起動用メモ
+ビルドコマンド
+デプロイ
+
+npm run build
+npx firebase deploy --only hosting
