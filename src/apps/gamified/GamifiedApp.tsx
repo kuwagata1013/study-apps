@@ -15,7 +15,9 @@ import {
   Trash2, 
   Volume2, 
   VolumeX, 
-  Sparkles 
+  Sparkles,
+  ShieldAlert,
+  Heart
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../../firebase';
@@ -48,6 +50,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
   const [level, setLevel] = useState(1);
   const [exp, setExp] = useState(0);
   const [streak, setStreak] = useState(1);
+  const [lifeTokens, setLifeTokens] = useState(1); // 救済アイテム（命の石）
+  const [lastStudyTime, setLastStudyTime] = useState<number>(Date.now());
   const maxExp = level * 100;
 
   // 3. タイマー関連ステート
@@ -59,8 +63,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
   // 4. データステート
   const [logs, setLogs] = useState<StudyLog[]>([]);
   const [tasks, setTasks] = useState<Task[]>([
-    { id: '1', title: 'Vue / React の比較調査', completed: true },
-    { id: '2', title: 'Firebase Auth の設定', completed: false },
+    { id: '1', title: 'デイリークエストを完了する', completed: false },
+    { id: '2', title: '学習タイマーで10分集中する', completed: false },
   ]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
@@ -68,7 +72,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
   const [isPlayingBgm, setIsPlayingBgm] = useState(false);
   const [bgmType, setBgmType] = useState<'cyber' | 'lofi' | 'rain'>('cyber');
 
-  // ローカルストレージからの読み込み
+  // 6. アバター歩行アニメーション用フレーム管理 (1〜5)
+  const [walkFrame, setWalkFrame] = useState(1);
+
+  // ローカルストレージからの読み込み ＆ デスセーブ判定
   useEffect(() => {
     const savedLevel = localStorage.getItem('gamified_level');
     if (savedLevel) setLevel(Number(savedLevel));
@@ -78,6 +85,36 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
 
     const savedStreak = localStorage.getItem('gamified_streak');
     if (savedStreak) setStreak(Number(savedStreak));
+
+    const savedTokens = localStorage.getItem('gamified_life_tokens');
+    if (savedTokens) setLifeTokens(Number(savedTokens));
+
+    const savedLastTime = localStorage.getItem('gamified_last_study_time');
+    const now = Date.now();
+    if (savedLastTime) {
+      const lastTime = Number(savedLastTime);
+      setLastStudyTime(lastTime);
+
+      // デスセーブ判定（24時間 = 86400000ミリ秒）
+      const twentyFourHours = 24 * 60 * 60 * 1000;
+      if (now - lastTime > twentyFourHours) {
+        if (Number(savedTokens || 1) > 0) {
+          // 救済アイテムで復活
+          const newTokens = Number(savedTokens || 1) - 1;
+          setLifeTokens(newTokens);
+          localStorage.setItem('gamified_life_tokens', newTokens.toString());
+          alert('⚠️ 24時間以上学習がなかったため死亡しそうになりましたが、所持していた「救済アイテム」が発動してキャラクターの死を阻止しました！');
+        } else {
+          // ゲームオーバー（リセット）
+          alert('💀 24時間以上学習タイマーが作動しなかったため、キャラクターのデータがリセットされました...');
+          setLevel(1);
+          setExp(0);
+          setStreak(1);
+          localStorage.setItem('gamified_level', '1');
+          localStorage.setItem('gamified_exp', '0');
+        }
+      }
+    }
 
     const savedLogs = localStorage.getItem('gamified_study_logs');
     if (savedLogs) {
@@ -90,17 +127,32 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     }
   }, []);
 
-  // タイマーのカウント処理
+  // タイマー＆歩行アニメーションのループ処理
   useEffect(() => {
     let interval: any = null;
+    let walkInterval: any = null;
+
     if (isActive) {
+      // 秒数カウント
       interval = setInterval(() => {
         setSeconds((sec) => sec + 1);
       }, 1000);
+
+      // 歩行アニメーション（タイマー稼働中は走る・歩くスピードが上がる：150msおきにフレーム切替）
+      walkInterval = setInterval(() => {
+        setWalkFrame((prev) => (prev % 5) + 1);
+      }, 150);
     } else {
-      clearInterval(interval);
+      // 停止中もゆっくり歩く（300msおき）
+      walkInterval = setInterval(() => {
+        setWalkFrame((prev) => (prev % 5) + 1);
+      }, 300);
     }
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(walkInterval);
+    };
   }, [isActive]);
 
   // EXP・レベルアップ計算処理
@@ -123,13 +175,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     localStorage.setItem('gamified_exp', newExp.toString());
 
     if (leveledUp) {
-      // ド派手な紙吹雪演出
       confetti({
         particleCount: 120,
         spread: 80,
         origin: { y: 0.6 }
       });
-      alert(`🎉 レベルアップ！ Lv.${newLevel} になりました！`);
+      alert(`🎉 レベルアップ！ Lv.${newLevel} になりました！ステージの景色が変化しました！`);
     }
   };
 
@@ -141,7 +192,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     }
 
     const durationMinutes = Math.max(1, Math.round(seconds / 60));
-    const gainedExp = durationMinutes * 10; // 1分 = 10 EXP
+    const gainedExp = durationMinutes * 10;
 
     const newLog: StudyLog = {
       id: Date.now().toString(),
@@ -156,10 +207,15 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     setLogs(updatedLogs);
     localStorage.setItem('gamified_study_logs', JSON.stringify(updatedLogs));
 
+    // 学習時刻を更新（デスセーブ対策）
+    const now = Date.now();
+    setLastStudyTime(now);
+    localStorage.setItem('gamified_last_study_time', now.toString());
+
     // EXP加算
     addExp(gainedExp);
 
-    // Firestore への探究データ送信 (researchLogs)
+    // Firestore保存
     try {
       let deviceId = localStorage.getItem('device_id');
       if (!deviceId) {
@@ -197,13 +253,20 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     setNewTaskTitle('');
   };
 
-  // タスク完了切り替え（完了時にEXPボーナス）
+  // タスク完了切り替え（EXP + 確率で救済アイテム獲得）
   const toggleTask = (id: string) => {
     const updated = tasks.map(t => {
       if (t.id === id) {
         const nextState = !t.completed;
         if (nextState) {
-          addExp(20); // タスク完了で 20 EXP 獲得
+          addExp(20);
+          // クエスト達成時に20%の確率で救済アイテム（命の石）を獲得
+          if (Math.random() < 0.2) {
+            const newTokens = lifeTokens + 1;
+            setLifeTokens(newTokens);
+            localStorage.setItem('gamified_life_tokens', newTokens.toString());
+            alert('🎁 クエスト報酬で「救済アイテム（命の石）」を手に入れました！');
+          }
         }
         return { ...t, completed: nextState };
       }
@@ -213,24 +276,49 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     localStorage.setItem('gamified_tasks', JSON.stringify(updated));
   };
 
-  // タスク削除
   const deleteTask = (id: string) => {
     const updated = tasks.filter(t => t.id !== id);
     setTasks(updated);
     localStorage.setItem('gamified_tasks', JSON.stringify(updated));
   };
 
-  // 秒数のフォーマット
   const formatTime = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // ステージに応じた背景のスタイル切り替え
+  const getStageBackground = () => {
+    if (level < 3) return 'from-emerald-950 via-slate-900 to-slate-950 border-emerald-500/30'; // 草原ステージ
+    if (level < 6) return 'from-amber-950 via-slate-900 to-slate-950 border-amber-500/30';     // 遺跡ステージ
+    if (level < 10) return 'from-indigo-950 via-slate-900 to-slate-950 border-indigo-500/30';   // 魔王城ステージ
+    return 'from-purple-950 via-fuchsia-950 to-slate-950 border-purple-500/30';                // 宇宙・神域ステージ
+  };
+
+  const getStageName = () => {
+    if (level < 3) return 'ステージ 1: 始まりの草原';
+    if (level < 6) return 'ステージ 2: 古代の遺跡';
+    if (level < 10) return 'ステージ 3: 試練の魔王城';
+    return 'ステージ 4: 限界突破の宇宙';
+  };
+
+  // 画像ファイルパスのマッピング（プロジェクト内の配置に合わせて調整してください）
+  const getAvatarImage = () => {
+    switch (walkFrame) {
+      case 1: return '/探究１.jpg';
+      case 2: return '/探究２.jpg';
+      case 3: return '/探究３.png';
+      case 4: return '/探究４.png';
+      case 5: return '/探究５.png';
+      default: return '/探究１.jpg';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24 antialiased selection:bg-purple-600 selection:text-white">
       
-      {/* ===== ゲーミフィケーション・常時表示ステータスヘッダー ===== */}
+      {/* ===== 常時表示ステータスヘッダー ===== */}
       <header className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur-md border-b border-purple-900/40 p-4">
         <div className="max-w-md mx-auto space-y-2">
           <div className="flex justify-between items-center">
@@ -243,9 +331,17 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-orange-950/50 border border-orange-500/30 px-3 py-1 rounded-full text-xs font-bold text-orange-400">
-              <Flame size={14} className="fill-orange-500 text-orange-500 animate-pulse" />
-              <span>{streak} 日ストリーク</span>
+            <div className="flex items-center gap-2">
+              {/* 救済アイテム所持数 */}
+              <div className="flex items-center gap-1 bg-red-950/50 border border-red-500/30 px-2.5 py-1 rounded-full text-xs font-bold text-red-400" title="死亡を阻止する救済アイテム">
+                <Heart size={14} className="fill-red-500 text-red-500" />
+                <span>× {lifeTokens}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-orange-950/50 border border-orange-500/30 px-3 py-1 rounded-full text-xs font-bold text-orange-400">
+                <Flame size={14} className="fill-orange-500 text-orange-500 animate-pulse" />
+                <span>{streak} 日</span>
+              </div>
             </div>
           </div>
 
@@ -268,12 +364,40 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
       {/* メインコンテンツエリア */}
       <main className="max-w-md mx-auto p-4 space-y-6 pt-4">
 
-        {/* ===== TAB 1: ゲーミングタイマー ===== */}
+        {/* ===== 横スクロール・冒険ステージビジュアル ===== */}
+        <div className={`bg-gradient-to-b ${getStageBackground()} rounded-3xl p-5 shadow-xl border relative overflow-hidden flex flex-col items-center justify-center space-y-3`}>
+          <div className="absolute top-3 left-4 flex items-center gap-1.5 text-[10px] font-bold text-slate-300 bg-slate-950/60 px-3 py-1 rounded-full backdrop-blur-sm border border-slate-700/50">
+            <Sparkles size={12} className="text-yellow-400" />
+            <span>{getStageName()}</span>
+          </div>
+
+          {/* 横スクロールアニメーションステージ */}
+          <div className="w-full h-36 bg-slate-950/80 rounded-2xl border border-slate-800 relative overflow-hidden flex items-center justify-center shadow-inner mt-4">
+            {/* 背景のスクロール装飾用グリッドや星 */}
+            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#a855f7_1px,transparent_1px)] [background-size:16px_16px] animate-pulse" />
+            
+            {/* 歩行するアバターイラスト */}
+            <div className="z-10 flex flex-col items-center transform transition-transform hover:scale-105">
+              <img 
+                src={getAvatarImage()} 
+                alt="冒険者アバター" 
+                className="w-24 h-24 object-contain filter drop-shadow-[0_0_10px_rgba(168,85,247,0.4)] animate-bounce"
+                style={{ animationDuration: isActive ? '0.8s' : '1.5s' }}
+              />
+            </div>
+
+            <div className="absolute bottom-2 right-3 text-[9px] text-slate-400 font-mono">
+              {isActive ? '⚡ 冒険疾走中...' : '💤 待機中...'}
+            </div>
+          </div>
+        </div>
+
+        {/* ===== TAB 1: タイマー ===== */}
         {activeTab === 'timer' && (
           <div className="space-y-6">
             <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 text-center space-y-4">
               <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest flex items-center justify-center gap-1">
-                <Sparkles size={12} /> Gamified Focus Mode
+                <Sparkles size={12} /> 学習クエストタイマー
               </span>
 
               {/* 科目選択 */}
@@ -294,13 +418,13 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
               </div>
 
               {/* ネオンタイマー表示 */}
-              <div className="py-10 bg-slate-950/80 rounded-2xl border border-purple-500/30 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
+              <div className="py-8 bg-slate-950/80 rounded-2xl border border-purple-500/30 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
                 <div className="absolute inset-0 bg-purple-600/5 blur-3xl rounded-full" />
-                <span className="text-6xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-300 font-mono z-10">
+                <span className="text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-300 font-mono z-10">
                   {formatTime(seconds)}
                 </span>
                 <p className="text-xs text-purple-400/80 mt-2 font-medium z-10 flex items-center gap-1">
-                  <Zap size={12} className="text-yellow-400" /> 1分ごとに +10 EXP 獲得！
+                  <Zap size={12} className="text-yellow-400" /> 1分 = +10 EXP / 死の回避タイマーリセット
                 </p>
               </div>
 
@@ -315,7 +439,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
                   }`}
                 >
                   {isActive ? <Pause size={20} /> : <Play size={20} />}
-                  {isActive ? '一時停止' : 'ミッション開始'}
+                  {isActive ? '一時停止' : '冒険＆学習開始'}
                 </button>
                 
                 <button
@@ -334,14 +458,14 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
                     type="text"
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
-                    placeholder="クエストの成果を入力（例: 章をクリアした！）"
+                    placeholder="今日の学習成果メモ（例: ReactのHooksを理解した）"
                     className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500"
                   />
                   <button
                     onClick={handleSaveLog}
                     className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-600/30"
                   >
-                    EXPを獲得してログを送信
+                    成果を記録してEXPを獲得
                   </button>
                 </div>
               )}
@@ -353,7 +477,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
         {activeTab === 'todo' && (
           <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-4">
             <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              <CheckSquare size={18} className="text-purple-400" /> デイリークエスト (ToDo)
+              <CheckSquare size={18} className="text-purple-400" /> デイリークエスト
             </h2>
 
             <form onSubmit={handleAddTask} className="flex gap-2">
@@ -361,7 +485,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
                 type="text"
                 value={newTaskTitle}
                 onChange={(e) => setNewTaskTitle(e.target.value)}
-                placeholder="新しいクエスト..."
+                placeholder="新しいクエストを追加..."
                 className="flex-1 px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500"
               />
               <button
@@ -411,7 +535,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
           <div className="space-y-4">
             <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-3">
               <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                <BarChart2 size={18} className="text-purple-400" /> 学習戦績サマリー
+                <BarChart2 size={18} className="text-purple-400" /> 冒険戦績サマリー
               </h2>
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center">
@@ -419,25 +543,26 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
                   <p className="text-2xl font-black text-purple-400 mt-1">Lv.{level}</p>
                 </div>
                 <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">獲得可能EXP</p>
-                  <p className="text-2xl font-black text-yellow-400 mt-1">{exp} EXP</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">救済アイテム</p>
+                  <p className="text-2xl font-black text-red-400 mt-1">× {lifeTokens}</p>
                 </div>
               </div>
             </div>
 
             <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                クエストログ履歴
+                冒険・学習ログ履歴
               </h3>
               <div className="space-y-2">
                 {logs.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-4">まだバトルログがありません</p>
+                  <p className="text-xs text-slate-500 text-center py-4">まだログがありません</p>
                 ) : (
                   logs.map((log) => (
                     <div key={log.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
                       <div>
                         <span className="font-bold text-purple-300">{log.subject}</span>
                         <p className="text-[10px] text-slate-500">{log.createdAt}</p>
+                        {log.memo && <p className="text-[10px] text-slate-400 mt-1">memo: {log.memo}</p>}
                       </div>
                       <div className="text-right">
                         <span className="font-black text-slate-200">{log.durationMinutes} 分</span>
@@ -457,7 +582,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
             <h2 className="text-base font-bold text-slate-100 flex items-center justify-center gap-2">
               <Music size={18} className="text-purple-400" /> ゾーン突入 BGM
             </h2>
-            <p className="text-xs text-slate-400">脳波を調整し、没入感を極限まで高めます</p>
+            <p className="text-xs text-slate-400">冒険の没入感を極限まで高めます</p>
 
             <div className="grid grid-cols-3 gap-2 pt-2">
               {[
@@ -495,21 +620,21 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
         {activeTab === 'profile' && (
           <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-4">
             <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              <User size={18} className="text-purple-400" /> プレイヤープロファイル
+              <User size={18} className="text-purple-400" /> 冒険者プロファイル
             </h2>
 
             <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-500">プレイヤー名:</span>
-                <span className="font-bold text-slate-200">{user ? user.displayName || 'ログイン中' : 'ゲストプレイヤー'}</span>
+                <span className="font-bold text-slate-200">{user ? user.displayName || 'ログイン中' : 'ゲスト冒険者'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">アカウント:</span>
                 <span className="font-mono text-slate-400">{user ? user.email : '未連携'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">探究端末ID:</span>
-                <span className="font-mono text-slate-400">{localStorage.getItem('device_id') || '未発行'}</span>
+                <span className="text-slate-500">デスセーブ状態:</span>
+                <span className="font-bold text-emerald-400">生存中 (保護アイテム {lifeTokens}個)</span>
               </div>
             </div>
           </div>
@@ -517,7 +642,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
 
       </main>
 
-      {/* ===== iPhone風 下部5タブナビゲーション（ネオン・ゲーミング仕様） ===== */}
+      {/* ===== 下部5タブナビゲーション ===== */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-md border-t border-purple-900/40 py-2 px-4 z-30">
         <div className="max-w-md mx-auto flex justify-around items-center">
           <button
@@ -525,7 +650,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
             className={`flex flex-col items-center gap-1 transition ${activeTab === 'timer' ? 'text-purple-400 font-bold' : 'text-slate-500'}`}
           >
             <Clock size={20} />
-            <span className="text-[10px]">バトル</span>
+            <span className="text-[10px]">冒険</span>
           </button>
 
           <button
