@@ -12,12 +12,12 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "canvas-confetti": "^1.9.4",
-    "firebase": "^12.18.0",
-    "framer-motion": "^13.2.0",
-    "lucide-react": "^1.42.0",
+    "firebase": "^12.19.0",
+    "framer-motion": "^13.4.3",
+    "lucide-react": "^1.48.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.3",
+    "react-router-dom": "^7.18.4",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
