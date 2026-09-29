@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Flame, 
   Trophy, 
@@ -40,6 +40,8 @@ interface Task {
   title: string;
   completed: boolean;
   isAutomatic?: boolean;
+  subject?: string;
+  targetMinutes?: number;
 }
 
 export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
@@ -63,10 +65,14 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
   // 4. データステート
   const [logs, setLogs] = useState<StudyLog[]>([]);
   const [tasks, setTasks] = useState<Task[]>([
-    { id: 'daily_login', title: 'デイリーログインを完了する（自動）', completed: true, isAutomatic: true },
-    { id: 'timer_1min', title: '学習タイマーで1分集中する（自動テスト）', completed: false, isAutomatic: true },
+    { id: 'daily_login', title: 'デイリーログインを完了する（自動）', completed: false, isAutomatic: true },
+    { id: 'timer_1min', title: '英語の学習を1分以上行う（確認用）', completed: false, isAutomatic: true, subject: '英語', targetMinutes: 1 },
   ]);
+  
+  // 新規クエスト作成用ステート
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskSubject, setNewTaskSubject] = useState('英語');
+  const [newTaskMinutes, setNewTaskMinutes] = useState(1);
 
   // 5. BGM関連ステート
   const [isPlayingBgm, setIsPlayingBgm] = useState(false);
@@ -75,10 +81,20 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
   // 6. アバター歩行アニメーション用フレーム管理
   const [walkFrame, setWalkFrame] = useState(1);
 
-  // ローカルストレージからの読み込み ＆ 強制タスク初期化
+  // 初回マウントの二重実行を防ぐためのRef
+  const hasInitializedRef = useRef(false);
+
+  // ローカルストレージからの読み込み ＆ デイリーログイン・タスク初期化
   useEffect(() => {
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
     const savedLevel = localStorage.getItem('gamified_level');
-    if (savedLevel) setLevel(Number(savedLevel));
+    let currentLevel = 1;
+    if (savedLevel) {
+      currentLevel = Number(savedLevel);
+      setLevel(currentLevel);
+    }
 
     const savedExp = localStorage.getItem('gamified_exp');
     if (savedExp) setExp(Number(savedExp));
@@ -92,48 +108,55 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     const savedLastTime = localStorage.getItem('gamified_last_study_time');
     const now = Date.now();
     if (savedLastTime) {
-      const lastTime = Number(savedLastTime);
-      setLastStudyTime(lastTime);
+      setLastStudyTime(Number(savedLastTime));
     } else {
       localStorage.setItem('gamified_last_study_time', now.toString());
     }
 
     const savedLogs = localStorage.getItem('gamified_study_logs');
+    let loadedLogs: StudyLog[] = [];
     if (savedLogs) {
-      try { setLogs(JSON.parse(savedLogs)); } catch (e) {}
+      try { 
+        loadedLogs = JSON.parse(savedLogs);
+        setLogs(loadedLogs); 
+      } catch (e) {}
     }
 
-    // 初期タスク設定
+    // --- デイリーログインチェック ---
+    const todayStr = new Date().toLocaleDateString('ja-JP');
+    const lastLoginDate = localStorage.getItem('gamified_last_login_date');
+
     const initialTasks: Task[] = [
-      { id: 'daily_login', title: 'デイリーログインを完了する（自動）', completed: true, isAutomatic: true },
-      { id: 'timer_1min', title: '学習タイマーで1分集中する（自動テスト）', completed: false, isAutomatic: true },
+      { id: 'daily_login', title: 'デイリーログインを完了する（自動）', completed: false, isAutomatic: true },
+      { id: 'timer_1min', title: '英語の学習を1分以上行う（確認用）', completed: false, isAutomatic: true, subject: '英語', targetMinutes: 1 },
     ];
     
+    let loadedTasks = initialTasks;
     const savedTasks = localStorage.getItem('gamified_tasks');
     if (savedTasks) {
       try { 
-        const parsedTasks: Task[] = JSON.parse(savedTasks);
-        const hasTimerTask = parsedTasks.some(t => t.id === 'timer_1min' || t.id === 'timer_10min');
-        if (hasTimerTask) {
-          const updated = parsedTasks.map(t => {
-            if (t.id === 'timer_10min' || t.id === 'timer_1min') {
-              return { ...t, id: 'timer_1min', title: '学習タイマーで1分集中する（自動テスト）', isAutomatic: true };
-            }
-            return t;
-          });
-          setTasks(updated);
-          localStorage.setItem('gamified_tasks', JSON.stringify(updated));
-        } else {
-          setTasks(initialTasks);
-          localStorage.setItem('gamified_tasks', JSON.stringify(initialTasks));
-        }
+        loadedTasks = JSON.parse(savedTasks);
       } catch (e) {
-        setTasks(initialTasks);
+        loadedTasks = initialTasks;
       }
-    } else {
-      setTasks(initialTasks);
-      localStorage.setItem('gamified_tasks', JSON.stringify(initialTasks));
     }
+
+    if (lastLoginDate !== todayStr) {
+      localStorage.setItem('gamified_last_login_date', todayStr);
+
+      loadedTasks = loadedTasks.map(t => {
+        if (t.id === 'daily_login') {
+          return { ...t, completed: true };
+        }
+        return t;
+      });
+
+      addExp(50);
+      alert(`🌟 デイリーログインボーナス！ 本日最初のログインで +50 EXP を獲得しました！`);
+    }
+
+    setTasks(loadedTasks);
+    localStorage.setItem('gamified_tasks', JSON.stringify(loadedTasks));
   }, []);
 
   // タイマー＆歩行アニメーションのループ処理
@@ -161,54 +184,75 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     };
   }, [isActive]);
 
+  // 経験値加算とレベルアップ判定（完全に二重加算を防ぐ単一ループ処理）
   const addExp = (gainedExp: number) => {
-    let newExp = exp + gainedExp;
-    let newLevel = level;
-    let currentMaxExp = newLevel * 100;
-    let leveledUp = false;
+    setExp((prevExp) => {
+      setLevel((prevLevel) => {
+        let currentExp = prevExp + gainedExp;
+        let currentLevel = prevLevel;
+        let leveledUp = false;
 
-    while (newExp >= currentMaxExp) {
-      newExp -= currentMaxExp;
-      newLevel += 1;
-      currentMaxExp = newLevel * 100;
-      leveledUp = true;
-    }
+        // レベルアップ判定（複数レベルアップにも対応しつつ確実に1回だけ通知）
+        while (currentExp >= currentLevel * 100) {
+          currentExp -= currentLevel * 100;
+          currentLevel += 1;
+          leveledUp = true;
+        }
 
-    setLevel(newLevel);
-    setExp(newExp);
-    localStorage.setItem('gamified_level', newLevel.toString());
-    localStorage.setItem('gamified_exp', newExp.toString());
+        // ステート更新後にローカルストレージへ保存
+        localStorage.setItem('gamified_level', currentLevel.toString());
+        localStorage.setItem('gamified_exp', currentExp.toString());
 
-    if (leveledUp) {
-      confetti({
-        particleCount: 120,
-        spread: 80,
-        origin: { y: 0.6 }
+        if (leveledUp) {
+          confetti({
+            particleCount: 120,
+            spread: 80,
+            origin: { y: 0.6 }
+          });
+          alert(`🎉 レベルアップ！ Lv.${currentLevel} になりました！`);
+        }
+
+        return currentLevel;
       });
-      alert(`🎉 レベルアップ！ Lv.${newLevel} になりました！`);
-    }
+
+      // exp自身の新しい値を返す
+      let tempLevel = level;
+      let tempExp = prevExp + gainedExp;
+      while (tempExp >= tempLevel * 100) {
+        tempExp -= tempLevel * 100;
+        tempLevel += 1;
+      }
+      return tempExp;
+    });
   };
 
-  const checkAndUpdateAutomaticTasks = (totalMinutes: number, currentLogs: StudyLog[]) => {
-    setTasks(prevTasks => {
-      const updated = prevTasks.map(task => {
-        if (task.id === 'timer_1min' && !task.completed) {
-          const todayStr = new Date().toLocaleDateString('ja-JP');
-          const todayMinutes = currentLogs
-            .filter(l => l.createdAt.includes(todayStr.split(' ')[0]))
-            .reduce((sum, l) => sum + l.durationMinutes, 0) + totalMinutes;
+  // クエスト自動達成判定
+  const checkAndUpdateAutomaticTasks = (savedSubject: string, targetLogs: StudyLog[]) => {
+    const todayStr = new Date().toLocaleDateString('ja-JP');
+    let newlyCompletedCount = 0;
 
-          if (todayMinutes >= 1) {
-            alert('🎯 【自動達成】「学習タイマーで1分集中する」クエストがクリアされました！ (+50 EXP)');
-            addExp(50);
-            return { ...task, completed: true };
-          }
+    const updated = tasks.map(task => {
+      if (task.completed) return task;
+
+      if (task.targetMinutes !== undefined && task.subject && task.subject === savedSubject) {
+        const subjectTotalMinutes = targetLogs
+          .filter(l => l.createdAt.includes(todayStr.split(' ')[0]) && l.subject === task.subject)
+          .reduce((sum, l) => sum + l.durationMinutes, 0);
+
+        if (subjectTotalMinutes >= task.targetMinutes) {
+          newlyCompletedCount++;
+          return { ...task, completed: true };
         }
-        return task;
-      });
-      localStorage.setItem('gamified_tasks', JSON.stringify(updated));
-      return updated;
+      }
+      return task;
     });
+
+    if (newlyCompletedCount > 0) {
+      setTasks(updated);
+      localStorage.setItem('gamified_tasks', JSON.stringify(updated));
+    }
+
+    return newlyCompletedCount;
   };
 
   const handleSaveLog = async () => {
@@ -218,13 +262,15 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     }
 
     const durationMinutes = Math.max(1, Math.round(seconds / 60));
-    const gainedExp = durationMinutes * 50;
+    
+    // 1. 時間経過によるEXP（1分あたり20 EXP）
+    const timeExp = durationMinutes * 20;
 
     const newLog: StudyLog = {
       id: Date.now().toString(),
       subject,
       durationMinutes,
-      expGained: gainedExp,
+      expGained: timeExp,
       createdAt: new Date().toLocaleString('ja-JP'),
       memo
     };
@@ -237,8 +283,21 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     setLastStudyTime(now);
     localStorage.setItem('gamified_last_study_time', now.toString());
 
-    addExp(gainedExp);
-    checkAndUpdateAutomaticTasks(durationMinutes, logs);
+    // 2. クエスト自動達成判定
+    const newlyCompletedCount = checkAndUpdateAutomaticTasks(subject, updatedLogs);
+    const questExp = 50 * newlyCompletedCount;
+
+    // 合計獲得EXP（時間経過EXP ＋ クエスト達成EXP）
+    const totalExpGained = timeExp + questExp;
+
+    if (newlyCompletedCount > 0) {
+      alert(`🎯 【自動達成】条件を達成したクエストが ${newlyCompletedCount} 件クリアされました！ (+${questExp} EXP)\n⏱️ 学習時間報酬 (+${timeExp} EXP)\n合計: +${totalExpGained} EXP 獲得！`);
+    } else {
+      alert(`⏱️ 学習時間報酬として +${timeExp} EXP を獲得しました！`);
+    }
+
+    // 正確に合計値だけを1回加算する
+    addExp(totalExpGained);
 
     try {
       let deviceId = localStorage.getItem('device_id');
@@ -269,43 +328,26 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
   const handleAddTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
-    const updated = [...tasks, { id: Date.now().toString(), title: newTaskTitle, completed: false, isAutomatic: false }];
+    
+    const minutes = Math.max(1, Number(newTaskMinutes) || 1);
+
+    const newTask: Task = {
+      id: Date.now().toString(),
+      title: newTaskTitle,
+      completed: false,
+      isAutomatic: true,
+      subject: newTaskSubject,
+      targetMinutes: minutes
+    };
+
+    const updated = [...tasks, newTask];
     setTasks(updated);
     localStorage.setItem('gamified_tasks', JSON.stringify(updated));
     setNewTaskTitle('');
-  };
-
-  // 一度チェックしたら外せない＆二度と押せない処理
-  const toggleTask = (id: string) => {
-    const targetTask = tasks.find(t => t.id === id);
-    if (!targetTask) return;
-
-    if (targetTask.isAutomatic) {
-      alert('🔒 このクエストは学習実績により自動で判定されます！');
-      return;
-    }
-
-    if (targetTask.completed) {
-      return; // すでに完了している場合は何もしない（disabledによりそもそも押せませんが念のため）
-    }
-
-    const updated = tasks.map(t => {
-      if (t.id === id) {
-        addExp(50);
-        return { ...t, completed: true };
-      }
-      return t;
-    });
-    setTasks(updated);
-    localStorage.setItem('gamified_tasks', JSON.stringify(updated));
+    setNewTaskMinutes(1);
   };
 
   const deleteTask = (id: string) => {
-    const targetTask = tasks.find(t => t.id === id);
-    if (targetTask?.isAutomatic) {
-      alert('⚠️ 自動クエストは削除できません。');
-      return;
-    }
     const updated = tasks.filter(t => t.id !== id);
     setTasks(updated);
     localStorage.setItem('gamified_tasks', JSON.stringify(updated));
@@ -322,24 +364,6 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     if (level < 6) return 'from-amber-950 via-slate-900 to-slate-950 border-amber-500/30';
     if (level < 10) return 'from-indigo-950 via-slate-900 to-slate-950 border-indigo-500/30';
     return 'from-purple-950 via-fuchsia-950 to-slate-950 border-purple-500/30';
-  };
-
-  const getStageName = () => {
-    if (level < 3) return 'ステージ 1: 始まりの草原';
-    if (level < 6) return 'ステージ 2: 古代の遺跡';
-    if (level < 10) return 'ステージ 3: 試練の魔王城';
-    return 'ステージ 4: 限界突破の宇宙';
-  };
-
-  const getAvatarImage = () => {
-    switch (walkFrame) {
-      case 1: return '/tankyu_1.png';
-      case 2: return '/tankyu_2.png';
-      case 3: return '/tankyu_3.png';
-      case 4: return '/tankyu_4.png';
-      case 5: return '/tankyu_5.png';
-      default: return '/tankyu_1.png';
-    }
   };
 
   return (
@@ -400,25 +424,33 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
             
             <div className="w-full md:w-3/4 flex flex-col">
               <div className={`flex-1 bg-gradient-to-b ${getStageBackground()} rounded-3xl p-5 shadow-xl border relative overflow-hidden flex flex-col items-center justify-center space-y-3`}>
-                <div className="absolute top-3 left-4 flex items-center gap-1.5 text-[10px] font-bold text-slate-300 bg-slate-950/60 px-3 py-1 rounded-full backdrop-blur-sm border border-slate-700/50 z-20">
-                  <Sparkles size={12} className="text-yellow-400" />
-                  <span>{getStageName()}</span>
-                </div>
-
-                <div className="w-full flex-1 min-h-[320px] md:min-h-[420px] bg-slate-950/80 rounded-2xl border border-slate-800 relative overflow-hidden flex items-center justify-center shadow-inner mt-4">
-                  <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#a855f7_1px,transparent_1px)] [background-size:16px_16px] animate-pulse" />
+                
+                <div className="w-full flex-1 min-h-[320px] md:min-h-[420px] bg-slate-950/80 rounded-2xl border border-slate-800 relative overflow-hidden flex items-center justify-center shadow-inner">
                   
-                  <div className="z-10 flex flex-col items-center">
+                  {!isActive ? (
                     <img 
-                      src={getAvatarImage()} 
-                      alt="冒険者アバター" 
-                      className="w-48 h-48 md:w-64 md:h-64 object-contain filter drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]"
+                      src="/home_bg.jpg" 
+                      alt="ステージ背景" 
+                      className="absolute inset-0 w-full h-full object-cover filter brightness-90"
                     />
-                  </div>
+                  ) : (
+                    <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#a855f7_1px,transparent_1px)] [background-size:16px_16px] animate-pulse" />
+                  )}
 
-                  <div className="absolute bottom-3 right-4 text-[10px] text-slate-400 font-mono">
-                    {isActive ? '⚡ 冒険疾走中...' : '💤 待機中...'}
-                  </div>
+                  {isActive && (
+                    <div className="z-10 flex flex-col items-center">
+                      <img 
+                        src={
+                          walkFrame === 1 ? '/tankyu_1.png' :
+                          walkFrame === 2 ? '/tankyu_2.png' :
+                          walkFrame === 3 ? '/tankyu_3.png' :
+                          walkFrame === 4 ? '/tankyu_4.png' : '/tankyu_5.png'
+                        } 
+                        alt="冒険者アバター" 
+                        className="w-48 h-48 md:w-64 md:h-64 object-contain filter drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -452,7 +484,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
                       {formatTime(seconds)}
                     </span>
                     <p className="text-[10px] text-purple-400/80 mt-2 font-medium z-10 flex items-center gap-1">
-                      <Zap size={10} className="text-yellow-400" /> 1分 = +20 EXP
+                      <Zap size={10} className="text-yellow-400" /> 1分 = +20 EXP ＋ クエスト達成で +50 EXP
                     </p>
                   </div>
                 </div>
@@ -508,69 +540,113 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
               <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-4">
                 <div className="flex justify-between items-center">
                   <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <CheckSquare size={18} className="text-purple-400" /> デイリークエスト
+                    <CheckSquare size={18} className="text-purple-400" /> クエストボード
                   </h2>
                   <span className="text-[10px] text-purple-400 bg-purple-950/60 border border-purple-500/30 px-2.5 py-1 rounded-full">
-                    自動判定クエストはサーバー連動
+                    同一教科の目標時間達成で自動クリア (+50 EXP)
                   </span>
                 </div>
 
-                <form onSubmit={handleAddTask} className="flex gap-2">
+                <form onSubmit={handleAddTask} className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-3">
+                  <p className="text-xs font-bold text-purple-300 flex items-center gap-1">
+                    <Plus size={14} /> 新しいクエストを作成
+                  </p>
+                  
                   <input
                     type="text"
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
-                    placeholder="新しいカスタムクエストを追加（手動チェック）..."
-                    className="flex-1 px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                    placeholder="クエスト名（例: 数学の基礎固め）"
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500"
                   />
-                  <button
-                    type="submit"
-                    className="p-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-500 transition shadow-md shadow-purple-600/30"
-                  >
-                    <Plus size={18} />
-                  </button>
+
+                  <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+                    <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                      <span className="text-[10px] text-slate-400 font-bold shrink-0">教科:</span>
+                      {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
+                        <button
+                          key={sub}
+                          type="button"
+                          onClick={() => setNewTaskSubject(sub)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition shrink-0 ${
+                            newTaskSubject === sub 
+                              ? 'bg-purple-600 text-white border border-purple-400' 
+                              : 'bg-slate-900 text-slate-400 border border-slate-800 hover:bg-slate-800'
+                          }`}
+                        >
+                          {sub}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                      <span className="text-[10px] text-slate-400 font-bold shrink-0">目標時間(分):</span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={newTaskMinutes}
+                        onChange={(e) => setNewTaskMinutes(Number(e.target.value))}
+                        className="w-20 px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 text-center focus:outline-none focus:border-purple-500"
+                      />
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-500 transition shadow-md shadow-purple-600/30 text-xs font-bold shrink-0"
+                      >
+                        追加
+                      </button>
+                    </div>
+                  </div>
                 </form>
 
                 <div className="space-y-2 pt-2">
                   {tasks.map((task) => (
                     <div 
                       key={task.id} 
-                      className={`flex items-center justify-between p-3 rounded-xl border ${
-                        task.isAutomatic 
-                          ? 'bg-purple-950/20 border-purple-500/30' 
-                          : 'bg-slate-950/60 border-slate-800'
+                      className={`flex items-center justify-between p-3.5 rounded-xl border ${
+                        task.completed 
+                          ? 'bg-emerald-950/20 border-emerald-500/30' 
+                          : 'bg-purple-950/20 border-purple-500/30'
                       }`}
                     >
-                      <label className={`flex items-center gap-3 text-xs flex-1 ${task.completed ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}>
+                      <div className="flex items-center gap-3 text-xs flex-1">
                         <input
                           type="checkbox"
                           checked={task.completed}
-                          disabled={task.completed} // ★ ここで一度チェックしたら二度と押せないように無効化
-                          onChange={() => toggleTask(task.id)}
-                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-900 border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={true}
+                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-900 border-slate-700 opacity-75 cursor-not-allowed"
                         />
-                        <div className="flex flex-col">
+                        <div className="flex flex-col gap-0.5">
                           <span className={task.completed ? 'line-through text-slate-500' : 'text-slate-200 font-semibold'}>
                             {task.title}
                           </span>
-                          {task.isAutomatic && (
-                            <span className="text-[9px] text-purple-400">※サーバー自動判定</span>
-                          )}
+                          <div className="flex items-center gap-2 text-[10px]">
+                            {task.subject && (
+                              <span className="text-purple-300 bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-500/30">
+                                教科: {task.subject}
+                              </span>
+                            )}
+                            {task.targetMinutes !== undefined && (
+                              <span className="text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                                目標: {task.targetMinutes}分以上
+                              </span>
+                            )}
+                            <span className="text-purple-400">※自動判定</span>
+                          </div>
                         </div>
-                      </label>
+                      </div>
                       
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-yellow-400 font-bold bg-yellow-400/10 border border-yellow-400/20 px-2 py-0.5 rounded-full">
                           +50 EXP
                         </span>
-                        {!task.isAutomatic && (
-                          <button
-                            onClick={() => deleteTask(task.id)}
-                            className="text-slate-500 hover:text-red-400 transition"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => deleteTask(task.id)}
+                          className="text-slate-500 hover:text-red-400 transition"
+                          title="削除"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </div>
                   ))}
