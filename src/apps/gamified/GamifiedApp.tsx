@@ -275,7 +275,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     setNewTaskTitle('');
   };
 
-  // 【修正】一度チェックしたら外せない＆EXPの重複獲得を防ぐ処理
+  // 一度チェックしたら外せない＆二度と押せない処理
   const toggleTask = (id: string) => {
     const targetTask = tasks.find(t => t.id === id);
     if (!targetTask) return;
@@ -285,13 +285,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
       return;
     }
 
-    // すでに完了している場合はチェックを外させない
     if (targetTask.completed) {
-      alert('✅ このクエストはすでに完了しています！');
-      return;
+      return; // すでに完了している場合は何もしない（disabledによりそもそも押せませんが念のため）
     }
 
-    // 未完了だった場合のみ、完了にしてEXPを加算
     const updated = tasks.map(t => {
       if (t.id === id) {
         addExp(20);
@@ -544,12 +541,13 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
                           : 'bg-slate-950/60 border-slate-800'
                       }`}
                     >
-                      <label className="flex items-center gap-3 cursor-pointer text-xs flex-1">
+                      <label className={`flex items-center gap-3 text-xs flex-1 ${task.completed ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}>
                         <input
                           type="checkbox"
                           checked={task.completed}
+                          disabled={task.completed} // ★ ここで一度チェックしたら二度と押せないように無効化
                           onChange={() => toggleTask(task.id)}
-                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-900 border-slate-700"
+                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-900 border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                         <div className="flex flex-col">
                           <span className={task.completed ? 'line-through text-slate-500' : 'text-slate-200 font-semibold'}>
