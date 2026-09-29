@@ -199,8 +199,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
             .reduce((sum, l) => sum + l.durationMinutes, 0) + totalMinutes;
 
           if (todayMinutes >= 1) {
-            alert('🎯 【自動達成】「学習タイマーで1分集中する」クエストがクリアされました！ (+20 EXP)');
-            addExp(20);
+            alert('🎯 【自動達成】「学習タイマーで1分集中する」クエストがクリアされました！ (+50 EXP)');
+            addExp(50);
             return { ...task, completed: true };
           }
         }
@@ -218,7 +218,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
     }
 
     const durationMinutes = Math.max(1, Math.round(seconds / 60));
-    const gainedExp = durationMinutes * 10;
+    const gainedExp = durationMinutes * 50;
 
     const newLog: StudyLog = {
       id: Date.now().toString(),
@@ -291,7 +291,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
 
     const updated = tasks.map(t => {
       if (t.id === id) {
-        addExp(20);
+        addExp(50);
         return { ...t, completed: true };
       }
       return t;
@@ -452,7 +452,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
                       {formatTime(seconds)}
                     </span>
                     <p className="text-[10px] text-purple-400/80 mt-2 font-medium z-10 flex items-center gap-1">
-                      <Zap size={10} className="text-yellow-400" /> 1分 = +10 EXP
+                      <Zap size={10} className="text-yellow-400" /> 1分 = +20 EXP
                     </p>
                   </div>
                 </div>
@@ -561,7 +561,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
                       
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-yellow-400 font-bold bg-yellow-400/10 border border-yellow-400/20 px-2 py-0.5 rounded-full">
-                          +20 EXP
+                          +50 EXP
                         </span>
                         {!task.isAutomatic && (
                           <button
