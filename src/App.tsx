@@ -104,10 +104,9 @@ export const App: React.FC = () => {
     }
   };
 
-  // 管理者認証チェック (安全なリンク保護)
+  // 管理者認証チェック
   const handleAdminAccessAttempt = (e: React.FormEvent) => {
     e.preventDefault();
-    // デフォルトパスワード: admin123
     if (adminPasswordInput === 'admin123') {
       setMode('admin');
       setIsAdminAuthOpen(false);
@@ -153,7 +152,11 @@ export const App: React.FC = () => {
       )}
 
       {mode === 'simple' && (
-        <SimpleApp user={user} isTestEnv={isTestEnvironment} />
+        <SimpleApp 
+          user={user} 
+          isTestEnv={isTestEnvironment} 
+          onOpenAdmin={() => setIsAdminAuthOpen(true)}
+        />
       )}
 
       {mode === 'gamified' && (
@@ -164,18 +167,11 @@ export const App: React.FC = () => {
         <AdminApp onExitAdmin={() => setMode('start')} isTestEnv={isTestEnvironment} />
       )}
 
-      {/* 共通設定ボタン（右上） */}
-      {mode !== 'start' && (
-        <button
-          onClick={() => setIsSettingsOpen(true)}
-          className="fixed top-4 right-4 z-40 p-3 bg-white/80 backdrop-blur-md rounded-full shadow-md border border-gray-200 text-gray-700 hover:bg-gray-100 transition"
-          title="設定"
-        >
-          <Settings size={20} />
-        </button>
-      )}
+      {/* 
+        ※ 右上にあった設定アイコンボタン (Settings) はマイページへの完全移設に伴い撤去しました 
+      */}
 
-      {/* 設定・プロフィール編集モーダル */}
+      {/* 設定・プロフィール編集モーダル（マイページ等からトリガーされる用） */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-xl space-y-6 max-h-[90vh] overflow-y-auto">
@@ -224,7 +220,6 @@ export const App: React.FC = () => {
                   />
                 </div>
 
-                {/* アイコン画像：URL＆ローカルファイルアップロード対応 */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">アイコン画像</label>
                   <div className="space-y-2">
@@ -268,11 +263,11 @@ export const App: React.FC = () => {
               </form>
             ) : (
               <div className="p-4 bg-gray-50 rounded-2xl text-center text-xs text-gray-500">
-                ゲストとして利用中（スタート画面からログインできます）
+                ゲストとして利用中
               </div>
             )}
 
-            {/* アプリ設定・テスト環境・管理者保護リンク */}
+            {/* アプリ設定 */}
             <div className="space-y-3 pt-2 border-t">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
                 アプリ設定・検証

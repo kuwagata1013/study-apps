@@ -3,7 +3,6 @@ import {
   Clock, 
   CheckSquare, 
   BarChart2, 
-  Music, 
   User, 
   Play, 
   Pause, 
@@ -16,14 +15,26 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Timer
+  Timer,
+  Settings,
+  Music,
+  Upload,
+  Save,
+  Lock,
+  LogOut,
+  Shield,
+  RefreshCw
 } from 'lucide-react';
-import { db } from '../../firebase';
+import { db, auth } from '../../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { updateProfile, signOut } from 'firebase/auth';
 
 interface SimpleAppProps {
   user?: any;
   isTestEnv?: boolean;
+  onSelectMode?: (mode: 'simple' | 'gamified') => void;
+  onOpenAdmin?: () => void;
+  onResetMode?: () => void; // モード切替（スタート画面へ戻る）用コールバック
 }
 
 interface StudyLog {
@@ -32,7 +43,7 @@ interface StudyLog {
   durationSeconds: number;
   durationMinutes?: number;
   createdAt: string;
-  dateKey: string; // YYYY-MM-DD
+  dateKey: string;
   memo: string;
 }
 
@@ -40,12 +51,17 @@ interface Task {
   id: string;
   title: string;
   completed: boolean;
-  dueDate?: string;     // YYYY-MM-DD
-  completedAt?: string; // YYYY-MM-DD HH:mm:ss
-  completedDateKey?: string; // YYYY-MM-DD
+  dueDate?: string;
+  completedAt?: string;
+  completedDateKey?: string;
 }
 
-export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false }) => {
+export const SimpleApp: React.FC<SimpleAppProps> = ({ 
+  user, 
+  isTestEnv = false, 
+  onOpenAdmin,
+  onResetMode 
+}) => {
   // 1. タブ管理 (timer | todo | calendar | stats | profile)
   const [activeTab, setActiveTab] = useState<'timer' | 'todo' | 'calendar' | 'stats' | 'profile'>('timer');
 
@@ -71,7 +87,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
   // 4. BGM関連ステート
   const [isPlayingBgm, setIsPlayingBgm] = useState(false);
   const [bgmType, setBgmType] = useState<'rain' | 'waves' | 'cafe'>('rain');
-  const [isBgmPopoverOpen, setIsBgmPopoverOpen] = useState(false);
 
   // 5. カレンダー・統計操作ステート
   const [statsPeriod, setStatsPeriod] = useState<'day' | 'week' | 'month'>('week');
@@ -80,16 +95,50 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
     new Date().toISOString().split('T')[0]
   );
 
-  // タイマー初期値セット (減算モード変更時)
+  // 6. マイページ内 アカウント設定編集ステート
+  const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState('');
+
+  // 7. 管理者認証モーダルステート
+  const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [adminAuthError, setAdminAuthError] = useState('');
+
+  // ユーザー情報の同期
   useEffect(() => {
-    if (timerMode === 'countdown' && !isActive) {
-      setSeconds(targetMinutes * 60);
-      setElapsedSecondsCount(0);
-    } else if (timerMode === 'countup' && !isActive) {
-      setSeconds(0);
-      setElapsedSecondsCount(0);
+    if (user) {
+      setDisplayName(user.displayName || '');
+      setPhotoURL(user.photoURL || '');
     }
-  }, [timerMode, targetMinutes]);
+  }, [user]);
+
+  // モード切替時（タイマー計測中でない場合のみ初期化）
+  const handleSwitchTimerMode = (newMode: 'countup' | 'countdown') => {
+    if (isActive) {
+      alert('計測中はモードを変更できません。一度一時停止してください。');
+      return;
+    }
+
+    setTimerMode(newMode);
+
+    if (elapsedSecondsCount === 0 && seconds === 0) {
+      if (newMode === 'countdown') {
+        setSeconds(targetMinutes * 60);
+      } else {
+        setSeconds(0);
+      }
+    }
+  };
+
+  // 減算モードの目標分数指定
+  const handleChangeTargetMinutes = (mins: number) => {
+    setTargetMinutes(mins);
+    if (!isActive && elapsedSecondsCount === 0) {
+      setSeconds(mins * 60);
+    }
+  };
 
   // タイマーカウント処理
   useEffect(() => {
@@ -104,7 +153,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
             if (sec <= 1) {
               clearInterval(interval);
               setIsActive(false);
-              alert('⏰ 設定時間が経過しました！お疲れ様でした。');
+              alert('設定時間が経過しました！');
               return 0;
             }
             return sec - 1;
@@ -133,6 +182,78 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
     }
   }, [isTestEnv]);
 
+  // プロフィール更新
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+
+    setIsUpdatingProfile(true);
+    setProfileMessage('');
+
+    try {
+      await updateProfile(auth.currentUser, {
+        displayName: displayName,
+        photoURL: photoURL
+      });
+      setProfileMessage('プロフィールを保存しました！');
+      setTimeout(() => setProfileMessage(''), 3000);
+    } catch (error) {
+      console.error('プロフィール更新エラー:', error);
+      setProfileMessage('更新に失敗しました。');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  // 画像ファイルアップロード (Base64変換)
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('画像サイズは2MB以下にしてください');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoURL(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // ログアウト処理
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      alert('ログアウトしました');
+    } catch (error) {
+      console.error('ログアウトエラー:', error);
+    }
+  };
+
+  // 管理者アクセスパスワードチェック
+  const handleAdminAccessAttempt = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminPasswordInput === 'admin123') {
+      setIsAdminAuthOpen(false);
+      setAdminPasswordInput('');
+      setAdminAuthError('');
+      if (onOpenAdmin) onOpenAdmin();
+    } else {
+      setAdminAuthError('パスワードが正しくありません');
+    }
+  };
+
+  // スタート画面に戻る（モード再選択）
+  const handleResetModeCall = () => {
+    if (onResetMode) {
+      onResetMode();
+    } else {
+      localStorage.removeItem('study_app_preferred_mode');
+      window.location.reload();
+    }
+  };
+
   // ログ保存
   const handleSaveLog = async () => {
     const recordSeconds = elapsedSecondsCount > 0 ? elapsedSecondsCount : (timerMode === 'countup' ? seconds : (targetMinutes * 60 - seconds));
@@ -160,7 +281,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
     setLogs(updatedLogs);
     localStorage.setItem(logKey, JSON.stringify(updatedLogs));
 
-    // Firestore への送信 (researchLogs)
     try {
       let deviceId = localStorage.getItem('device_id');
       if (!deviceId) {
@@ -187,7 +307,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
     setSeconds(timerMode === 'countdown' ? targetMinutes * 60 : 0);
     setElapsedSecondsCount(0);
     setMemo('');
-    alert(`学習ログを保存しました！（${formatTimeDetail(recordSeconds)}）`);
+    alert(`学習ログを保存しました（${formatTimeDetail(recordSeconds)}）`);
   };
 
   // ToDo タスク追加
@@ -259,13 +379,12 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
     return `${mins}分${secs}秒`;
   };
 
-  // 累計学習時間の計算
   const totalSecondsAll = logs.reduce((acc, log) => {
     const secs = log.durationSeconds ?? ((log.durationMinutes || 0) * 60);
     return acc + (isNaN(secs) ? 0 : secs);
   }, 0);
 
-  // カレンダー描画用ヘルパー
+  // カレンダー計算
   const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
 
@@ -277,7 +396,13 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
   const prevMonth = () => setCurrentCalendarDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentCalendarDate(new Date(year, month + 1, 1));
 
+  // 選択日のログおよび合計時間計算
   const logsOnSelectedDate = logs.filter(l => (l.dateKey || l.createdAt.split(' ')[0].replace(/\//g, '-')) === selectedCalendarDateStr);
+  const totalSecondsOnSelectedDate = logsOnSelectedDate.reduce((acc, log) => {
+    const secs = log.durationSeconds ?? ((log.durationMinutes || 0) * 60);
+    return acc + (isNaN(secs) ? 0 : secs);
+  }, 0);
+
   const tasksCompletedOnSelectedDate = tasks.filter(t => t.completed && t.completedDateKey === selectedCalendarDateStr);
   const tasksDueOnSelectedDate = tasks.filter(t => t.dueDate === selectedCalendarDateStr);
 
@@ -289,82 +414,37 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
         {/* ===== TAB 1: タイマー ===== */}
         {activeTab === 'timer' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 text-center space-y-4 relative">
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 text-center space-y-4">
               
-              {/* BGM クイックボタン */}
-              <div className="absolute top-4 right-4 z-10">
-                <button
-                  onClick={() => setIsBgmPopoverOpen(!isBgmPopoverOpen)}
-                  className={`p-2 rounded-full border transition flex items-center gap-1 text-xs ${
-                    isPlayingBgm 
-                      ? 'bg-amber-500 text-white border-amber-500 shadow-sm' 
-                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                  }`}
-                  title="BGMクイック設定"
-                >
-                  {isPlayingBgm ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                  <span className="text-[10px] font-bold">{isPlayingBgm ? bgmType : 'OFF'}</span>
-                </button>
-
-                {isBgmPopoverOpen && (
-                  <div className="absolute right-0 mt-2 w-44 bg-white rounded-2xl shadow-xl border border-gray-100 p-3 space-y-2 text-left z-20">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase">集中BGM切替</p>
-                    <div className="space-y-1">
-                      {[
-                        { id: 'rain', label: '雨の音 🌧️' },
-                        { id: 'waves', label: '波の音 🌊' },
-                        { id: 'cafe', label: 'カフェ ☕' }
-                      ].map((b) => (
-                        <button
-                          key={b.id}
-                          onClick={() => { setBgmType(b.id as any); setIsPlayingBgm(true); }}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
-                            bgmType === b.id && isPlayingBgm ? 'bg-gray-900 text-white' : 'hover:bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          {b.label}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => setIsPlayingBgm(!isPlayingBgm)}
-                      className="w-full mt-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-lg text-[10px] text-center"
-                    >
-                      {isPlayingBgm ? 'BGMをオフにする' : '再生開始'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {/* 加算 vs 減算 切替 */}
               <div className="flex justify-center pt-2">
                 <div className="bg-gray-100 p-1 rounded-2xl flex gap-1 border border-gray-200">
                   <button
-                    onClick={() => { if (!isActive) setTimerMode('countup'); }}
+                    onClick={() => handleSwitchTimerMode('countup')}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
                       timerMode === 'countup' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
                     }`}
                   >
-                    <Clock size={14} /> 加算 (ストップウォッチ)
+                    <Clock size={14} /> 加算
                   </button>
                   <button
-                    onClick={() => { if (!isActive) setTimerMode('countdown'); }}
+                    onClick={() => handleSwitchTimerMode('countdown')}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
                       timerMode === 'countdown' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
                     }`}
                   >
-                    <Timer size={14} /> 減算 (カウントダウン)
+                    <Timer size={14} /> 減算
                   </button>
                 </div>
               </div>
 
-              {/* 減算式 目標時間指定 */}
-              {timerMode === 'countdown' && !isActive && (
+              {/* 減算時 目標時間指定 */}
+              {timerMode === 'countdown' && !isActive && elapsedSecondsCount === 0 && (
                 <div className="flex justify-center gap-1.5 pt-1">
                   {[10, 15, 25, 30, 60].map((mins) => (
                     <button
                       key={mins}
-                      onClick={() => setTargetMinutes(mins)}
+                      onClick={() => handleChangeTargetMinutes(mins)}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${
                         targetMinutes === mins 
                           ? 'bg-blue-50 text-blue-700 border-blue-300 font-bold' 
@@ -400,7 +480,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
                     type="text"
                     value={customSubject}
                     onChange={(e) => setCustomSubject(e.target.value)}
-                    placeholder="教科・勉強内容を入力 (例: 物理, 世界史)"
+                    placeholder="教科・勉強内容を入力"
                     className="w-full max-w-xs px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-center focus:outline-none focus:ring-2 focus:ring-gray-400"
                   />
                 )}
@@ -412,7 +492,9 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
                   {formatTime(seconds)}
                 </span>
                 <p className="text-xs text-gray-400 mt-2 font-medium">
-                  {timerMode === 'countup' ? '経過時間を計測中' : `目標: ${targetMinutes}分 カウントダウン`}
+                  {elapsedSecondsCount > 0 
+                    ? `計測実績: ${formatTimeDetail(elapsedSecondsCount)}` 
+                    : (timerMode === 'countup' ? '経過時間を計測中' : `目標: ${targetMinutes}分 カウントダウン`)}
                 </p>
               </div>
 
@@ -614,10 +696,12 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
 
             {/* 選択日の詳細 */}
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 space-y-3">
-              <h4 className="text-xs font-bold text-gray-900 border-b pb-2 flex justify-between items-center">
-                <span>📅 選択中: {selectedCalendarDateStr} の記録</span>
-                <span className="text-[10px] text-gray-400 font-normal">学習時間 & 達成タスク</span>
-              </h4>
+              <div className="border-b pb-2 flex justify-between items-center">
+                <span className="text-xs font-bold text-gray-900">選択中: {selectedCalendarDateStr} の記録</span>
+                <span className="text-xs font-extrabold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                  合計: {formatTimeDetail(totalSecondsOnSelectedDate)}
+                </span>
+              </div>
 
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-gray-400 uppercase">学習時間ログ</p>
@@ -733,29 +817,198 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({ user, isTestEnv = false })
 
         {/* ===== TAB 5: マイページ ===== */}
         {activeTab === 'profile' && (
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
-            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-              <User size={18} /> アカウント＆端末情報
-            </h2>
+          <div className="space-y-4">
+            
+            {/* プロフィール設定フォーム */}
+            <form onSubmit={handleUpdateProfile} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
+                <User size={18} /> アカウント・プロフィール設定
+              </h2>
 
-            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-gray-400">ユーザー名:</span>
-                <span className="font-bold text-gray-800">{user ? user.displayName || 'ログイン中' : 'ゲスト'}</span>
+              <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-200 border border-gray-300 flex items-center justify-center shrink-0">
+                  {photoURL ? (
+                    <img src={photoURL} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <User size={28} className="text-gray-400" />
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 overflow-hidden">
+                  <p className="font-bold text-gray-900 text-sm truncate">{displayName || '未設定'}</p>
+                  <p className="truncate text-gray-400">{user?.email || 'ゲストアカウント'}</p>
+                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">ID: {localStorage.getItem('device_id') || '未発行'}</p>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">メールアドレス:</span>
-                <span className="font-mono text-gray-600">{user ? user.email : 'なし'}</span>
+
+              {user && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">名前</label>
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                      placeholder="表示名を入力"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">アイコン画像</label>
+                    <div className="space-y-2">
+                      <input
+                        type="url"
+                        value={photoURL}
+                        onChange={(e) => setPhotoURL(e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                        placeholder="画像URLを入力 (https://...)"
+                      />
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageFileUpload}
+                          className="hidden"
+                          id="profile-icon-file-input"
+                        />
+                        <label
+                          htmlFor="profile-icon-file-input"
+                          className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition border border-gray-200"
+                        >
+                          <Upload size={14} /> 画像ファイルを選択
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {profileMessage && (
+                    <p className="text-xs font-semibold text-green-600 text-center">{profileMessage}</p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isUpdatingProfile}
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
+                  >
+                    <Save size={16} />
+                    {isUpdatingProfile ? '更新中...' : 'プロフィールを保存'}
+                  </button>
+                </>
+              )}
+            </form>
+
+            {/* BGM環境音設定 */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
+                <Music size={18} /> 集中BGM環境音
+              </h2>
+
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'rain', label: '雨の音' },
+                  { id: 'waves', label: '波の音' },
+                  { id: 'cafe', label: 'カフェ' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setBgmType(item.id as any)}
+                    className={`py-3 px-2 rounded-2xl text-xs font-bold transition border ${
+                      bgmType === item.id 
+                        ? 'bg-gray-900 text-white border-gray-900' 
+                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">探究端末ID:</span>
-                <span className="font-mono text-gray-600">{localStorage.getItem('device_id') || '未発行'}</span>
-              </div>
+
+              <button
+                onClick={() => setIsPlayingBgm(!isPlayingBgm)}
+                className={`w-full py-3.5 rounded-2xl font-bold text-white transition flex items-center justify-center gap-2 shadow-sm ${
+                  isPlayingBgm ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-900 hover:bg-gray-800'
+                }`}
+              >
+                {isPlayingBgm ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                {isPlayingBgm ? 'BGMを停止' : 'BGMを再生'}
+              </button>
             </div>
+
+            {/* システム連携・モード切替・管理者認証ボタン */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
+                <Settings size={18} /> アプリ設定・検証
+              </h2>
+
+              {/* モード切替（スタート画面へ戻る）ボタン */}
+              <button
+                onClick={handleResetModeCall}
+                className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-gray-200"
+              >
+                <RefreshCw size={16} />
+                モードを再選択する（スタート画面へ）
+              </button>
+
+              <button
+                onClick={() => setIsAdminAuthOpen(true)}
+                className="w-full py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-purple-100"
+              >
+                <Lock size={16} />
+                管理者用分析ページ（要パスワード）
+              </button>
+
+              {user && (
+                <button
+                  onClick={handleLogout}
+                  className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-red-100"
+                >
+                  <LogOut size={16} />
+                  ログアウト
+                </button>
+              )}
+            </div>
+
           </div>
         )}
 
       </main>
+
+      {/* 管理者アクセス認証モーダル */}
+      {isAdminAuthOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <Shield size={18} className="text-purple-600" /> 管理者認証
+              </h3>
+              <button onClick={() => setIsAdminAuthOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold">✕</button>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              管理者分析ページを開くにはパスワードを入力してください。
+            </p>
+
+            <form onSubmit={handleAdminAccessAttempt} className="space-y-3">
+              <input
+                type="password"
+                value={adminPasswordInput}
+                onChange={(e) => setAdminPasswordInput(e.target.value)}
+                placeholder="パスワードを入力"
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              {adminAuthError && (
+                <p className="text-xs text-red-500 font-bold">{adminAuthError}</p>
+              )}
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition shadow-sm"
+              >
+                認証して開く
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 下部5タブバー */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 py-2 px-4 z-30">
