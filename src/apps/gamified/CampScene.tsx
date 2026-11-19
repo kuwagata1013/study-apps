@@ -1,5 +1,8 @@
 import React from 'react';
 import './CampScene.css';
+import { getSitFrames } from './characterSprite';
+
+const SIT_FRAMES = getSitFrames();
 
 // タイマー停止中に表示する「森でキャンプして休憩中」の絵。
 // テント・たき火はドット絵の SVG、炎は2コマを切り替えてゆらめかせる。
@@ -145,11 +148,7 @@ const LOG_SEAT: Rect[] = [
 
 const SPARKS = [0, 1, 2, 3, 4];
 
-interface CampSceneProps {
-  characterSrc: string;
-}
-
-export const CampScene: React.FC<CampSceneProps> = ({ characterSrc }) => (
+export const CampScene: React.FC = () => (
   <div className="camp-scene" aria-label="キャンプで休憩中">
     <div className="camp-glow" />
 
@@ -174,8 +173,11 @@ export const CampScene: React.FC<CampSceneProps> = ({ characterSrc }) => (
       <PixelArt w={26} h={8} rects={LOG_SEAT} />
     </div>
 
-    {/* たき火のほうを向いて休むキャラクター */}
-    <img src={characterSrc} alt="たき火で休憩する冒険者" className="camp-character" />
+    {/* 丸太に腰かけ、たき火に手をかざして休むキャラクター（2コマで呼吸） */}
+    <div className="camp-character" role="img" aria-label="たき火で休憩する冒険者">
+      <img src={SIT_FRAMES[0]} alt="" className="camp-sit-a" />
+      <img src={SIT_FRAMES[1]} alt="" className="camp-sit-b" />
+    </div>
 
     <p className="camp-caption">キャンプで休憩中… 「学習開始」で冒険に出発！</p>
   </div>

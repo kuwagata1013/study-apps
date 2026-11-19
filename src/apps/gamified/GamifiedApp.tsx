@@ -23,7 +23,10 @@ import {
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
-import { WALK_FRAME_MS, WALK_FRAME_COUNT, CHARACTER_HEIGHT } from './walkConfig';
+import { WALK_FRAME_MS, WALK_FRAME_COUNT, CHARACTER_WIDTH, CHARACTER_HEIGHT } from './walkConfig';
+import { getWalkFrames } from './characterSprite';
+
+const WALK_FRAME_URLS = getWalkFrames();
 import { saveResearchLog } from '../../lib/researchLog';
 import { getParticipantId } from '../../lib/participant';
 
@@ -443,19 +446,18 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   {/* 動く森の背景（学習中は景色が流れる） */}
                   <ForestBackground moving={isActive} />
 
-                  {/* アバター描画：新しい8枚の画像（tankyu1〜8.png）を使用。足元を小道に合わせる */}
+                  {/* アバター描画：元のイラストをもとにしたドット絵の12コマ（characterSprite.ts）。足元を小道に合わせる */}
                   {isActive && (
-                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[38px] z-10">
-                      {/* 8コマを重ねて置き、表示するコマだけ切り替える（読み込み待ちのちらつき防止）。
-                          縮小表示なので、ドットが欠けないよう滑らかに描画する */}
-                      <div className="relative" style={{ height: CHARACTER_HEIGHT, width: CHARACTER_HEIGHT }}>
-                        {Array.from({ length: WALK_FRAME_COUNT }, (_, i) => (
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[48px] z-10">
+                      {/* 全コマを重ねて置き、表示するコマだけ切り替える */}
+                      <div className="relative" style={{ height: CHARACTER_HEIGHT, width: CHARACTER_WIDTH }}>
+                        {WALK_FRAME_URLS.map((src, i) => (
                           <img
                             key={i}
-                            src={`/tankyu${i + 1}.png`}
+                            src={src}
                             alt={i + 1 === currentFrame ? '冒険者アバター歩行中' : ''}
                             aria-hidden={i + 1 !== currentFrame}
-                            className="absolute inset-0 w-full h-full object-contain object-bottom"
+                            className="absolute inset-0 w-full h-full [image-rendering:pixelated]"
                             style={{ visibility: i + 1 === currentFrame ? 'visible' : 'hidden' }}
                           />
                         ))}
@@ -464,7 +466,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   )}
 
                   {/* 休憩中はたき火でキャンプ */}
-                  {!isActive && <CampScene characterSrc="/tankyu1.png" />}
+                  {!isActive && <CampScene />}
                 </div>
               </div>
             </div>

@@ -1,16 +1,16 @@
 // 歩行アニメーションと背景スクロールを同期させるための設定
 
-// 1コマの表示時間（ミリ秒）。8コマで1周（左右1歩ずつ）
-export const WALK_FRAME_MS = 115;
-export const WALK_FRAME_COUNT = 8;
+import { WALK_FRAMES, SPRITE_H, SPRITE_W, SPRITE_PX, STRIDE_HALF } from './characterSprite';
 
-// キャラクター画像（200×350px）の表示高さ（px）
-export const CHARACTER_HEIGHT = 224;
-const SPRITE_HEIGHT = 350;
+// 1コマの表示時間（ミリ秒）。12コマで1周（左右1歩ずつ）
+export const WALK_FRAME_MS = 80;
+export const WALK_FRAME_COUNT = WALK_FRAMES;
 
-// 元画像での1周あたりの歩幅（px）。接地した足がコマの間に後ろへ動く量から計測
-const STRIDE_PER_CYCLE = 164;
+// キャラクターの表示サイズ（px）。1ドット = 4px のちょうどの倍率で表示する
+export const CHARACTER_WIDTH = SPRITE_W * SPRITE_PX;
+export const CHARACTER_HEIGHT = SPRITE_H * SPRITE_PX;
 
-// 足が地面を滑って見えないよう、地面（近景）の流れる速さを歩幅に合わせる（px/秒）
+// 接地した足は、1周の半分の時間で「片足の歩幅（前後の幅）」だけ一定の速さで後ろへ動く。
+// 地面（近景）をこれと同じ速さで流すと、足が地面を滑って見えない（px/秒）
 export const GROUND_SPEED =
-  (STRIDE_PER_CYCLE * (CHARACTER_HEIGHT / SPRITE_HEIGHT)) / ((WALK_FRAME_MS * WALK_FRAME_COUNT) / 1000);
+  (2 * STRIDE_HALF * SPRITE_PX) / ((WALK_FRAME_MS * WALK_FRAME_COUNT) / 2 / 1000);
