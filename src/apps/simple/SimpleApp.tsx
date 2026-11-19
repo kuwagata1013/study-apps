@@ -22,7 +22,6 @@ import {
   Save,
   Lock,
   LogOut,
-  Shield,
   RefreshCw
 } from 'lucide-react';
 import { db, auth } from '../../firebase';
@@ -102,9 +101,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const [profileMessage, setProfileMessage] = useState('');
 
   // 7. 管理者認証モーダルステート
-  const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState('');
-  const [adminAuthError, setAdminAuthError] = useState('');
 
   // ユーザー情報の同期
   useEffect(() => {
@@ -228,19 +224,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       alert('ログアウトしました');
     } catch (error) {
       console.error('ログアウトエラー:', error);
-    }
-  };
-
-  // 管理者アクセスパスワードチェック
-  const handleAdminAccessAttempt = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (adminPasswordInput === 'admin123') {
-      setIsAdminAuthOpen(false);
-      setAdminPasswordInput('');
-      setAdminAuthError('');
-      if (onOpenAdmin) onOpenAdmin();
-    } else {
-      setAdminAuthError('パスワードが正しくありません');
     }
   };
 
@@ -950,11 +933,11 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
               </button>
 
               <button
-                onClick={() => setIsAdminAuthOpen(true)}
+                onClick={() => onOpenAdmin?.()}
                 className="w-full py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-purple-100"
               >
                 <Lock size={16} />
-                管理者用分析ページ（要パスワード）
+                管理者用分析ページ（管理者アカウント限定）
               </button>
 
               {user && (
@@ -972,43 +955,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
         )}
 
       </main>
-
-      {/* 管理者アクセス認証モーダル */}
-      {isAdminAuthOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                <Shield size={18} className="text-purple-600" /> 管理者認証
-              </h3>
-              <button onClick={() => setIsAdminAuthOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold">✕</button>
-            </div>
-
-            <p className="text-xs text-gray-500">
-              管理者分析ページを開くにはパスワードを入力してください。
-            </p>
-
-            <form onSubmit={handleAdminAccessAttempt} className="space-y-3">
-              <input
-                type="password"
-                value={adminPasswordInput}
-                onChange={(e) => setAdminPasswordInput(e.target.value)}
-                placeholder="パスワードを入力"
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-              {adminAuthError && (
-                <p className="text-xs text-red-500 font-bold">{adminAuthError}</p>
-              )}
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition shadow-sm"
-              >
-                認証して開く
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* 下部5タブバー */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 py-2 px-4 z-30">
@@ -1059,4 +1005,4 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   );
 };
 
-export default SimpleApp;
+export default SimpleApp; 

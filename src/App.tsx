@@ -5,7 +5,8 @@ import {
   updateProfile, 
   type User as FirebaseUser 
 } from 'firebase/auth';
-import { auth } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './firebase';
 import StartApp from './apps/start/StartApp';
 import GamifiedApp from './apps/gamified/GamifiedApp';
 import SimpleApp from './apps/simple/SimpleApp';
@@ -21,7 +22,7 @@ export const App: React.FC = () => {
 
   // 管理者画面アクセス保護用
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false);
   const [adminAuthError, setAdminAuthError] = useState('');
 
   // テスト環境モードフラグ
@@ -104,17 +105,34 @@ export const App: React.FC = () => {
     }
   };
 
-  // 管理者認証チェック
-  const handleAdminAccessAttempt = (e: React.FormEvent) => {
+  const openAdminAuth = () => {
+    setAdminAuthError('');
+    setIsAdminAuthOpen(true);
+  };
+
+  // 管理者認証チェック（Firestore の admins/{uid} ドキュメントの有無で判定）
+  const handleAdminAccessAttempt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPasswordInput === 'admin123') {
-      setMode('admin');
-      setIsAdminAuthOpen(false);
-      setIsSettingsOpen(false);
-      setAdminPasswordInput('');
-      setAdminAuthError('');
-    } else {
-      setAdminAuthError('パスワードが正しくありません');
+    setAdminAuthError('');
+    if (!user) {
+      setAdminAuthError('管理者ページを開くには Google でログインしてください');
+      return;
+    }
+    setIsCheckingAdmin(true);
+    try {
+      const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+      if (adminDoc.exists()) {
+        setMode('admin');
+        setIsAdminAuthOpen(false);
+        setIsSettingsOpen(false);
+      } else {
+        setAdminAuthError('このアカウントには管理者権限がありません');
+      }
+    } catch (error) {
+      console.error('管理者確認エラー:', error);
+      setAdminAuthError('このアカウントには管理者権限がありません');
+    } finally {
+      setIsCheckingAdmin(false);
     }
   };
 
@@ -155,7 +173,7 @@ export const App: React.FC = () => {
         <SimpleApp 
           user={user} 
           isTestEnv={isTestEnvironment} 
-          onOpenAdmin={() => setIsAdminAuthOpen(true)}
+          onOpenAdmin={openAdminAuth}
         />
       )}
 
@@ -297,11 +315,11 @@ export const App: React.FC = () => {
               </button>
 
               <button
-                onClick={() => setIsAdminAuthOpen(true)}
+                onClick={openAdminAuth}
                 className="w-full py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-purple-100"
               >
                 <Lock size={16} />
-                管理者用データ分析ページ（パスワード保護）
+                管理者用データ分析ページ（管理者アカウント限定）
               </button>
             </div>
 
@@ -322,7 +340,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* 管理者用アクセスパスワード確認モーダル */}
+      {/* 管理者アクセス確認モーダル */}
       {isAdminAuthOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
@@ -334,25 +352,24 @@ export const App: React.FC = () => {
             </div>
 
             <p className="text-xs text-gray-500">
-              管理者用分析ページへアクセスするには認証パスワードを入力してください。
+              管理者として登録された Google アカウントでログインしている場合のみ開けます。
             </p>
+            {user && (
+              <p className="text-[10px] text-gray-400 break-all">
+                あなたのUID: <span className="font-mono select-all">{user.uid}</span>
+              </p>
+            )}
 
             <form onSubmit={handleAdminAccessAttempt} className="space-y-3">
-              <input
-                type="password"
-                value={adminPasswordInput}
-                onChange={(e) => setAdminPasswordInput(e.target.value)}
-                placeholder="パスワードを入力"
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
               {adminAuthError && (
                 <p className="text-xs text-red-500 font-bold">{adminAuthError}</p>
               )}
               <button
                 type="submit"
-                className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition"
+                disabled={isCheckingAdmin}
+                className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-bold rounded-xl text-xs transition"
               >
-                管理者画面を開く
+                {isCheckingAdmin ? '確認中...' : '管理者画面を開く'}
               </button>
             </form>
           </div>

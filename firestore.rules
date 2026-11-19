@@ -1,0 +1,49 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 管理者かどうか: admins/{uid} ドキュメントが存在するユーザーのみ
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // 管理者リスト: 自分のドキュメントの有無だけ確認できる。追加・削除は Firebase コンソールから行う
+    match /admins/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    // 学習ログ: 誰でも1件ずつ追加できる（ゲスト含む）。閲覧は管理者のみ。変更・削除は不可
+    match /researchLogs/{logId} {
+      allow read: if isAdmin();
+      allow update, delete: if false;
+      allow create: if isValidLog(request.resource.data);
+    }
+
+    function isValidLog(d) {
+      return d.keys().hasOnly([
+          'uid', 'deviceId', 'mode', 'subject', 'durationSeconds',
+          'durationMinutes', 'memo', 'createdAt', 'isTestEnv', 'userAgent'
+        ])
+        && d.keys().hasAll(['uid', 'deviceId', 'mode', 'subject', 'durationMinutes', 'createdAt'])
+        // 自分のUIDか 'anonymous' 以外は名乗れない
+        && (d.uid == 'anonymous' || (request.auth != null && d.uid == request.auth.uid))
+        && d.deviceId is string && d.deviceId.size() <= 64
+        && d.mode in ['simple', 'simple_test', 'gamified']
+        && d.subject is string && d.subject.size() <= 100
+        && d.durationMinutes is int && d.durationMinutes >= 0 && d.durationMinutes <= 1440
+        && (!('durationSeconds' in d) || (d.durationSeconds is int && d.durationSeconds >= 0 && d.durationSeconds <= 86400))
+        && (!('memo' in d) || (d.memo is string && d.memo.size() <= 2000))
+        && (!('isTestEnv' in d) || d.isTestEnv is bool)
+        && (!('userAgent' in d) || (d.userAgent is string && d.userAgent.size() <= 512))
+        && d.createdAt == request.time;
+    }
+
+    // それ以外はすべて拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
