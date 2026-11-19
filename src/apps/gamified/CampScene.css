@@ -93,18 +93,16 @@
   z-index: 5;
 }
 
-/* キャラクターは反転してたき火のほうを向く。
-   腰から下を切り取り、丸太の後ろに置いて腰かけているように見せる */
+/* 座っているキャラクター（public/character/sit.png、117 × 211 px を 0.75 倍で表示）。
+   反転してたき火のほうを向き、丸太に腰かける。脚は丸太の手前に出す */
 .camp-character {
-  bottom: 14px;
-  margin-left: -38px;
-  clip-path: inset(0 0 21% 0);
-  width: 192px;
-  height: 192px;
-  object-fit: contain;
+  bottom: 30px;
+  margin-left: 16px;
+  width: 88px;
+  height: 158px;
   transform: scaleX(-1);
   transform-origin: bottom center;
-  z-index: 4;
+  z-index: 6;
   animation: camp-breathe 3.2s ease-in-out infinite;
 }
 
@@ -132,10 +130,7 @@
     zoom: 0.85;
   }
   .camp-character {
-    width: 168px;
-    height: 168px;
-    bottom: 16px;
-    margin-left: -36px;
+    zoom: 0.85;
   }
   .camp-caption {
     font-size: 10px;
@@ -180,8 +175,9 @@
 }
 
 @keyframes camp-breathe {
-  0%, 100% { transform: scaleX(-1) translateY(0); }
-  50% { transform: scaleX(-1) translateY(-2px); }
+  /* 丸太から浮かないよう、足元を基準にほんの少しだけ伸び縮みする */
+  0%, 100% { transform: scaleX(-1) scaleY(1); }
+  50% { transform: scaleX(-1) scaleY(1.012); }
 }
 
 @media (prefers-reduced-motion: reduce) {

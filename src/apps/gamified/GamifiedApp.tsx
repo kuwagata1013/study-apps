@@ -457,9 +457,9 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   <ForestBackground moving={isActive} />
 
                   {/* アバター描画：歩行の12コマ（walk_sheet.png）。足元を小道に合わせる。
-                      --s は表示の倍率（スマホ 0.53、PC 0.67） */}
+                      --s は表示の倍率（スマホ 0.42、PC 0.5） */}
                   {isActive && (
-                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[52px] z-10 [--s:0.53] md:[--s:0.67]">
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[52px] z-10 [--s:0.42] md:[--s:0.5]">
                       <div
                         role="img"
                         aria-label="冒険者アバター歩行中"
@@ -476,7 +476,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   )}
 
                   {/* 休憩中はたき火でキャンプ */}
-                  {!isActive && <CampScene characterSrc="/tankyu1.png" />}
+                  {!isActive && <CampScene characterSrc="/character/sit.png" />}
                 </div>
               </div>
             </div>
