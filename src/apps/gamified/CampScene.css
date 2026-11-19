@@ -104,6 +104,8 @@
   object-fit: contain;
   transform: scaleX(-1);
   transform-origin: bottom center;
+  /* 縮小表示なので滑らかに描画（ドットが欠けないように） */
+  image-rendering: auto;
   z-index: 4;
   animation: camp-breathe 3.2s ease-in-out infinite;
 }
