@@ -23,6 +23,20 @@ import {
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
+
+// 歩行アニメーション：1枚の画像（public/character/walk_sheet.png、624 × 864 px、4列 × 3段）に
+// 並んだ12コマで1周（左右1歩ずつ）。表示するコマの部分だけを映す
+const WALK_SHEET = { src: '/character/walk_sheet.png', width: 624, height: 864 };
+// 1コマを切り出す枠の大きさ（px）。頭の中心と足の裏をそろえて、コマごとの位置のずれをなくしている
+const WALK_BOX = { width: 154, height: 283 };
+// 各コマの枠の左上の位置（シート上の px）
+const WALK_FRAMES: [number, number][] = [
+  [2, 3], [157, 3], [312, 2], [467, 2],
+  [0, 288], [158, 288], [313, 288], [468, 288],
+  [0, 576], [155, 576], [311, 579], [469, 579]
+];
+const WALK_FRAME_COUNT = WALK_FRAMES.length;
+const WALK_FRAME_MS = 140; // 1コマの表示時間（ミリ秒）
 import { saveResearchLog } from '../../lib/researchLog';
 import { getParticipantId } from '../../lib/participant';
 
@@ -198,8 +212,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
     if (isActive) {
       animInterval = setInterval(() => {
-        setCurrentFrame((prev) => (prev % 8) + 1);
-      }, 220); // 速度（ミリ秒）はお好みで調整可能です
+        setCurrentFrame((prev) => (prev % WALK_FRAME_COUNT) + 1);
+      }, WALK_FRAME_MS);
     } else {
       setCurrentFrame(1); // 停止時は1番の画像に戻す
     }
@@ -442,13 +456,21 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   {/* 動く森の背景（学習中は景色が流れる） */}
                   <ForestBackground moving={isActive} />
 
-                  {/* アバター描画：新しい8枚の画像（tankyu1〜8.png）を使用。足元を小道に合わせる */}
+                  {/* アバター描画：歩行の12コマ（walk_sheet.png）。足元を小道に合わせる。
+                      --s は表示の倍率（スマホ 0.53、PC 0.67） */}
                   {isActive && (
-                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[38px] z-10">
-                      <img 
-                        src={`/tankyu${currentFrame}.png`} 
-                        alt="冒険者アバター歩行中" 
-                        className="w-48 h-48 md:w-64 md:h-64 object-contain [image-rendering:pixelated]"
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[52px] z-10 [--s:0.53] md:[--s:0.67]">
+                      <div
+                        role="img"
+                        aria-label="冒険者アバター歩行中"
+                        style={{
+                          width: `calc(${WALK_BOX.width}px * var(--s))`,
+                          height: `calc(${WALK_BOX.height}px * var(--s))`,
+                          backgroundImage: `url(${WALK_SHEET.src})`,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundSize: `calc(${WALK_SHEET.width}px * var(--s)) calc(${WALK_SHEET.height}px * var(--s))`,
+                          backgroundPosition: `calc(${-WALK_FRAMES[(currentFrame - 1) % WALK_FRAME_COUNT][0]}px * var(--s)) calc(${-WALK_FRAMES[(currentFrame - 1) % WALK_FRAME_COUNT][1]}px * var(--s))`
+                        }}
                       />
                     </div>
                   )}
