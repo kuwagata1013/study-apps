@@ -24,9 +24,10 @@ import {
   LogOut,
   RefreshCw
 } from 'lucide-react';
-import { db, auth } from '../../firebase';
+import { auth } from '../../firebase';
 import { getLocalAvatar, setLocalAvatar, resizeImageFile, isDataUrl } from '../../lib/avatar';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { saveResearchLog } from '../../lib/researchLog';
+import { getParticipantId } from '../../lib/participant';
 import { updateProfile, signOut } from 'firebase/auth';
 
 interface SimpleAppProps {
@@ -134,6 +135,14 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       setSeconds(mins * 60);
     }
   };
+
+  // 計測セッションの開始時刻（最初に開始を押した時刻。保存・リセットで解除）
+  const sessionStartRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (isActive && sessionStartRef.current === null) {
+      sessionStartRef.current = Date.now();
+    }
+  }, [isActive]);
 
   // タイマーカウント処理
   // 実時間との差分で進めるため、タブが裏に回って処理が間引かれても時間がずれない
@@ -283,26 +292,16 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     setLogs(updatedLogs);
     localStorage.setItem(logKey, JSON.stringify(updatedLogs));
 
-    try {
-      let deviceId = localStorage.getItem('device_id');
-      if (!deviceId) {
-        deviceId = 'dev_' + Math.random().toString(36).substring(2, 10);
-        localStorage.setItem('device_id', deviceId);
-      }
-
-      await addDoc(collection(db, 'researchLogs'), {
-        uid: user ? user.uid : 'anonymous',
-        deviceId: deviceId,
-        mode: 'simple',
-        subject: finalSubject,
-        durationSeconds: recordSeconds,
-        durationMinutes: Math.round(recordSeconds / 60),
-        memo: memo,
-        createdAt: serverTimestamp()
-      });
-    } catch (e) {
-      console.error('Firestore保存エラー:', e);
-    }
+    await saveResearchLog({
+      mode: 'simple',
+      uid: user?.uid,
+      subject: finalSubject,
+      durationSeconds: recordSeconds,
+      startedAtMs: sessionStartRef.current,
+      memo,
+      timerType: timerMode
+    });
+    sessionStartRef.current = null;
 
     setIsActive(false);
     setSeconds(timerMode === 'countdown' ? targetMinutes * 60 : 0);
@@ -516,6 +515,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                     setIsActive(false);
                     setSeconds(timerMode === 'countdown' ? targetMinutes * 60 : 0);
                     setElapsedSecondsCount(0);
+                    sessionStartRef.current = null;
                   }}
                   className="p-4 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-2xl transition"
                   title="リセット"
@@ -837,7 +837,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                 <div className="text-xs text-gray-500 overflow-hidden">
                   <p className="font-bold text-gray-900 text-sm truncate">{displayName || '未設定'}</p>
                   <p className="truncate text-gray-400">{user?.email || 'ゲストアカウント'}</p>
-                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">ID: {localStorage.getItem('device_id') || '未発行'}</p>
+                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">参加者ID: {getParticipantId() || '未入力'}</p>
                 </div>
               </div>
 

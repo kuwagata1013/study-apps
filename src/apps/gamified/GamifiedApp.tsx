@@ -21,8 +21,8 @@ import {
   Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { db } from '../../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { saveResearchLog } from '../../lib/researchLog';
+import { getParticipantId } from '../../lib/participant';
 
 interface GamifiedAppProps {
   user?: any;
@@ -182,6 +182,14 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     return () => clearInterval(interval);
   }, [isActive]);
 
+  // 計測セッションの開始時刻（最初に開始を押した時刻。保存・リセットで解除）
+  const sessionStartRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (isActive && sessionStartRef.current === null) {
+      sessionStartRef.current = Date.now();
+    }
+  }, [isActive]);
+
   // 歩行アニメーション：新しい8枚の画像を順番に切り替え
   useEffect(() => {
     let animInterval: any = null;
@@ -303,28 +311,20 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       alert(`⏱️ 学習時間報酬として +${timeExp} EXP を獲得しました！`);
     }
 
+    const levelAtSave = level;
     addExp(totalExpGained);
 
-    try {
-      let deviceId = localStorage.getItem('device_id');
-      if (!deviceId) {
-        deviceId = 'dev_' + Math.random().toString(36).substring(2, 10);
-        localStorage.setItem('device_id', deviceId);
-      }
-
-      await addDoc(collection(db, 'researchLogs'), {
-        uid: user ? user.uid : 'anonymous',
-        deviceId: deviceId,
-        mode: 'gamified',
-        subject: subject,
-        durationMinutes: durationMinutes,
-        memo: memo,
-        createdAt: serverTimestamp(),
-        userAgent: navigator.userAgent
-      });
-    } catch (e) {
-      console.error('Firestore保存エラー:', e);
-    }
+    await saveResearchLog({
+      mode: 'gamified',
+      uid: user?.uid,
+      subject,
+      durationSeconds: seconds,
+      startedAtMs: sessionStartRef.current,
+      memo,
+      level: levelAtSave,
+      expGained: totalExpGained
+    });
+    sessionStartRef.current = null;
 
     setIsActive(false);
     setSeconds(0);
@@ -504,7 +504,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                     </button>
                     
                     <button
-                      onClick={() => { setIsActive(false); setSeconds(0); }}
+                      onClick={() => { setIsActive(false); setSeconds(0); sessionStartRef.current = null; }}
                       className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl transition border border-slate-700"
                       title="リセット"
                     >
@@ -753,6 +753,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   <div className="flex justify-between">
                     <span className="text-slate-500">プレイヤー名:</span>
                     <span className="font-bold text-slate-200">{user ? user.displayName || 'ログイン中' : 'ゲスト冒険者'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">参加者ID:</span>
+                    <span className="font-mono font-bold text-slate-200">{getParticipantId() || '未入力'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">アカウントID:</span>

@@ -7,6 +7,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { getParticipantId, isValidParticipantId } from './lib/participant';
 import StartApp from './apps/start/StartApp';
 import GamifiedApp from './apps/gamified/GamifiedApp';
 import SimpleApp from './apps/simple/SimpleApp';
@@ -35,7 +36,8 @@ export const App: React.FC = () => {
   // 初回起動時のモード自動読み込み＆認証状態の監視
   useEffect(() => {
     const savedMode = localStorage.getItem('study_app_preferred_mode') as AppMode;
-    if (savedMode && (savedMode === 'simple' || savedMode === 'gamified')) {
+    // 参加者IDが未入力の場合はスタート画面で入力してもらう
+    if (savedMode && (savedMode === 'simple' || savedMode === 'gamified') && isValidParticipantId(getParticipantId())) {
       setMode(savedMode);
     }
 

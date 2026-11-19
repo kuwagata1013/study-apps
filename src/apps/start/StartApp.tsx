@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
-import { Coffee, Sparkles, LogIn, ArrowRight, User } from 'lucide-react';
+import { Coffee, Sparkles, LogIn, ArrowRight, User, IdCard } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../../firebase';
+import {
+  getParticipantId,
+  saveParticipantId,
+  normalizeParticipantId,
+  isValidParticipantId,
+  PARTICIPANT_ID_MAX
+} from '../../lib/participant';
 
 interface StartAppProps {
   onSelectMode: (mode: 'simple' | 'gamified') => void;
@@ -10,6 +17,21 @@ interface StartAppProps {
 
 export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user }) => {
   const [loading, setLoading] = useState(false);
+  const [participantInput, setParticipantInput] = useState(getParticipantId());
+  const [participantError, setParticipantError] = useState('');
+
+  const participantId = normalizeParticipantId(participantInput);
+  const isParticipantValid = isValidParticipantId(participantId);
+
+  // 参加者IDを確認・保存してからモードを開始
+  const handleSelectMode = (mode: 'simple' | 'gamified') => {
+    if (!isParticipantValid) {
+      setParticipantError('参加者IDを入力してください（半角英数字・ハイフン・アンダースコア、32文字まで）');
+      return;
+    }
+    saveParticipantId(participantId);
+    onSelectMode(mode);
+  };
 
   // Google ログイン処理
   const handleGoogleLogin = async () => {
@@ -91,17 +113,52 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user }) => {
           )}
         </div>
 
-        {/* STEP 2: モード選択エリア */}
+        {/* STEP 2: 参加者ID */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
+          <div className="text-center">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              STEP 2: 参加者IDを入力
+            </span>
+          </div>
+          <label className="block">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-1.5">
+              <IdCard size={14} /> 参加者ID
+            </span>
+            <input
+              type="text"
+              value={participantInput}
+              onChange={(e) => {
+                setParticipantInput(e.target.value);
+                setParticipantError('');
+              }}
+              maxLength={PARTICIPANT_ID_MAX}
+              autoComplete="off"
+              placeholder="例: A01"
+              className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 font-mono ${
+                participantError ? 'border-red-400' : 'border-gray-200'
+              }`}
+            />
+          </label>
+          {participantError ? (
+            <p className="text-[11px] text-red-500 font-bold">{participantError}</p>
+          ) : (
+            <p className="text-[10px] text-gray-400">
+              配布されたIDを入力してください。どの端末でも同じIDを使うと、記録がまとめて集計されます。
+            </p>
+          )}
+        </div>
+
+        {/* STEP 3: モード選択エリア */}
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
           <div className="text-center">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              STEP 2: モードを選択して開始
+              STEP 3: モードを選択して開始
             </span>
           </div>
 
           <div className="space-y-3">
             <button
-              onClick={() => onSelectMode('simple')}
+              onClick={() => handleSelectMode('simple')}
               className="w-full p-4 bg-gray-50 hover:bg-blue-50/50 border border-gray-200 hover:border-blue-200 rounded-2xl transition flex items-center justify-between group text-left"
             >
               <div className="flex items-center gap-3.5">
@@ -121,7 +178,7 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user }) => {
             </button>
 
             <button
-              onClick={() => onSelectMode('gamified')}
+              onClick={() => handleSelectMode('gamified')}
               className="w-full p-4 bg-purple-50/50 hover:bg-purple-100/50 border border-purple-100 hover:border-purple-300 rounded-2xl transition flex items-center justify-between group text-left"
             >
               <div className="flex items-center gap-3.5">

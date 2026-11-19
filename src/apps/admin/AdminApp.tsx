@@ -7,28 +7,10 @@ import {
   Plus, 
   Trash2, 
   Upload, 
-  Download, 
-  RefreshCw, 
   Play, 
   Pause
 } from 'lucide-react';
-import { db } from '../../firebase';
-import {
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  limit,
-  startAfter,
-  type QueryDocumentSnapshot,
-  type DocumentData
-} from 'firebase/firestore';
-
-const LOG_PAGE_SIZE = 50;
-
-// 秒数（なければ分×60）で学習時間を返す
-const getDurationSeconds = (log: { durationSeconds?: number; durationMinutes?: number }) =>
-  log.durationSeconds ?? (log.durationMinutes ?? 0) * 60;
+import ResearchDataPanel from './ResearchDataPanel';
 
 interface AdminAppProps {
   onExitAdmin: () => void;
@@ -38,18 +20,6 @@ interface BgmTrack {
   id: string;
   name: string;
   url: string;
-}
-
-interface DBLog {
-  id: string;
-  uid?: string;
-  deviceId?: string;
-  mode?: string;
-  subject?: string;
-  durationSeconds?: number;
-  durationMinutes?: number;
-  memo?: string;
-  createdAt?: any;
 }
 
 export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
@@ -65,50 +35,12 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
   const [newBgmUrl, setNewBgmUrl] = useState('');
   const [previewAudio, setPreviewAudio] = useState<{ id: string; audio: HTMLAudioElement } | null>(null);
 
-  // --- 2. DB確認用ステート ---
-  const [dbLogs, setDbLogs] = useState<DBLog[]>([]);
-  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-  const [logsError, setLogsError] = useState('');
-  const [lastLogDoc, setLastLogDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [hasMoreLogs, setHasMoreLogs] = useState(false);
-
-  // 初回データ読込 (BGMリスト & DBログ)
   useEffect(() => {
     const savedBgm = localStorage.getItem('admin_custom_bgm_list');
     if (savedBgm) {
       try { setBgmList(JSON.parse(savedBgm)); } catch (e) {}
     }
-    fetchFirestoreLogs();
   }, []);
-
-  // Firestore データ取得（loadMore=true で続きを読み込む）
-  const fetchFirestoreLogs = async (loadMore = false) => {
-    setIsLoadingLogs(true);
-    setLogsError('');
-    try {
-      const base = collection(db, 'researchLogs');
-      const q = loadMore && lastLogDoc
-        ? query(base, orderBy('createdAt', 'desc'), startAfter(lastLogDoc), limit(LOG_PAGE_SIZE))
-        : query(base, orderBy('createdAt', 'desc'), limit(LOG_PAGE_SIZE));
-      const querySnapshot = await getDocs(q);
-      const fetched: DBLog[] = querySnapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString('ja-JP') : '直近'
-        };
-      });
-      setDbLogs((prev) => (loadMore ? [...prev, ...fetched] : fetched));
-      setLastLogDoc(querySnapshot.docs[querySnapshot.docs.length - 1] ?? (loadMore ? lastLogDoc : null));
-      setHasMoreLogs(querySnapshot.docs.length === LOG_PAGE_SIZE);
-    } catch (e) {
-      console.error('DB読み込みエラー:', e);
-      setLogsError('ログを読み込めませんでした。管理者として登録されたアカウントでログインしているか確認してください。');
-    } finally {
-      setIsLoadingLogs(false);
-    }
-  };
 
   // MP3ファイル直接アップロード (Base64化)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,39 +110,6 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
     }
   };
 
-  // CSV エクスポート
-  const exportToCSV = () => {
-    if (dbLogs.length === 0) {
-      alert('出力可能なデータがありません');
-      return;
-    }
-
-    const headers = ['Document ID', 'UID', 'Device ID', 'Mode', 'Subject', 'Duration(Sec)', 'Memo', 'Created At'];
-    const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = dbLogs.map(l => [
-      l.id,
-      l.uid || 'anonymous',
-      l.deviceId || '',
-      l.mode || '',
-      l.subject || '',
-      getDurationSeconds(l),
-      l.memo || '',
-      l.createdAt || ''
-    ].map(escape).join(','));
-
-    const blob = new Blob(['\uFEFF' + [headers.map(escape).join(','), ...rows].join('\r\n')], {
-      type: 'text/csv;charset=utf-8'
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `research_logs_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 pb-12 antialiased">
       
@@ -258,7 +157,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
               activeTab === 'database' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Database size={16} /> DBデータ確認
+            <Database size={16} /> 研究データ
           </button>
         </div>
 
@@ -366,92 +265,8 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
           </div>
         )}
 
-        {/* ===== TAB 2: DB確認 ===== */}
-        {activeTab === 'database' && (
-          <div className="bg-slate-950 rounded-3xl p-6 border border-slate-800 space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Database size={18} className="text-purple-400" /> Firestore 探究ログ (researchLogs)
-                </h2>
-                <p className="text-[10px] text-slate-400">新しい順に50件ずつ表示します（読み込んだ分をCSV出力できます）</p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => fetchFirestoreLogs()}
-                  disabled={isLoadingLogs}
-                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition border border-slate-700"
-                  title="更新"
-                >
-                  <RefreshCw size={16} className={isLoadingLogs ? 'animate-spin' : ''} />
-                </button>
-                <button
-                  onClick={exportToCSV}
-                  className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md"
-                >
-                  <Download size={14} /> CSV出力
-                </button>
-              </div>
-            </div>
-
-            {logsError && (
-              <p className="text-xs text-red-400 font-bold">{logsError}</p>
-            )}
-
-            <div className="overflow-x-auto border border-slate-800 rounded-2xl">
-              <table className="w-full text-left text-[11px] text-slate-300">
-                <thead className="bg-slate-900 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-800">
-                  <tr>
-                    <th className="p-3">日時</th>
-                    <th className="p-3">モード</th>
-                    <th className="p-3">教科</th>
-                    <th className="p-3">学習時間</th>
-                    <th className="p-3">端末ID</th>
-                    <th className="p-3">メモ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {dbLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-6 text-center text-slate-500">
-                        {isLoadingLogs ? 'データを読み込み中...' : 'ログデータがありません'}
-                      </td>
-                    </tr>
-                  ) : (
-                    dbLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-900/50 transition">
-                        <td className="p-3 font-mono text-slate-400 whitespace-nowrap">{log.createdAt}</td>
-                        <td className="p-3 font-bold">
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] ${
-                            log.mode?.includes('simple') ? 'bg-blue-900/50 text-blue-300' : 'bg-purple-900/50 text-purple-300'
-                          }`}>
-                            {log.mode}
-                          </span>
-                        </td>
-                        <td className="p-3 font-bold text-white">{log.subject}</td>
-                        <td className="p-3 font-mono font-bold text-green-400">{getDurationSeconds(log)} 秒</td>
-                        <td className="p-3 font-mono text-slate-500">{log.deviceId}</td>
-                        <td className="p-3 text-slate-400 max-w-xs truncate">{log.memo || '-'}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {hasMoreLogs && (
-              <button
-                onClick={() => fetchFirestoreLogs(true)}
-                disabled={isLoadingLogs}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-slate-200 font-bold rounded-xl text-xs transition border border-slate-700"
-              >
-                {isLoadingLogs ? '読み込み中...' : 'さらに50件読み込む'}
-              </button>
-            )}
-            <p className="text-[10px] text-slate-500 text-right">表示中: {dbLogs.length} 件</p>
-          </div>
-        )}
+        {/* ===== TAB 2: 研究データ ===== */}
+        {activeTab === 'database' && <ResearchDataPanel />}
 
       </main>
 
