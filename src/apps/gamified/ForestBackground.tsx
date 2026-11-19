@@ -235,6 +235,8 @@ export const ForestBackground: React.FC<ForestBackgroundProps> = ({ moving }) =>
         );
       })}
 
+      <div className="forest-dusk" />
+
       <div className="forest-particles">
         {PARTICLES.map((p, i) => (
           <span

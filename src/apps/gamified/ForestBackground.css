@@ -113,9 +113,25 @@
   50% { opacity: 0.9; }
 }
 
-/* 動きを減らす設定の端末では、景色を止める */
+/* 休憩中は夕暮れ色にする */
+.forest-dusk {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(120, 70, 140, 0.45) 0%, rgba(255, 150, 90, 0.3) 45%, rgba(40, 30, 60, 0.25) 100%);
+  opacity: 1;
+  transition: opacity 1.2s ease;
+  z-index: 1;
+}
+.forest-bg.is-moving .forest-dusk {
+  opacity: 0;
+}
+.forest-layer,
+.forest-particles {
+  z-index: 0;
+}
+
+/* 動きを減らす設定の端末では、飾りの動きだけ止める（歩いているときの景色は流す） */
 @media (prefers-reduced-motion: reduce) {
-  .forest-layer,
   .forest-particle,
   .forest-leaf,
   .forest-sun,

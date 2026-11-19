@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
+import CampScene from './CampScene';
 import { saveResearchLog } from '../../lib/researchLog';
 import { getParticipantId } from '../../lib/participant';
 
@@ -451,6 +452,9 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                       />
                     </div>
                   )}
+
+                  {/* 休憩中はたき火でキャンプ */}
+                  {!isActive && <CampScene characterSrc="/tankyu1.png" />}
                 </div>
               </div>
             </div>
