@@ -14,7 +14,22 @@ import {
   Pause
 } from 'lucide-react';
 import { db } from '../../firebase';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  limit,
+  startAfter,
+  type QueryDocumentSnapshot,
+  type DocumentData
+} from 'firebase/firestore';
+
+const LOG_PAGE_SIZE = 50;
+
+// 秒数（なければ分×60）で学習時間を返す
+const getDurationSeconds = (log: { durationSeconds?: number; durationMinutes?: number }) =>
+  log.durationSeconds ?? (log.durationMinutes ?? 0) * 60;
 
 interface AdminAppProps {
   onExitAdmin: () => void;
@@ -55,6 +70,9 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
   // --- 2. DB確認用ステート ---
   const [dbLogs, setDbLogs] = useState<DBLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [logsError, setLogsError] = useState('');
+  const [lastLogDoc, setLastLogDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMoreLogs, setHasMoreLogs] = useState(false);
 
   // 初回データ読込 (BGMリスト & DBログ)
   useEffect(() => {
@@ -65,24 +83,30 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
     fetchFirestoreLogs();
   }, []);
 
-  // Firestore データ取得
-  const fetchFirestoreLogs = async () => {
+  // Firestore データ取得（loadMore=true で続きを読み込む）
+  const fetchFirestoreLogs = async (loadMore = false) => {
     setIsLoadingLogs(true);
+    setLogsError('');
     try {
-      const q = query(collection(db, 'researchLogs'), orderBy('createdAt', 'desc'), limit(50));
+      const base = collection(db, 'researchLogs');
+      const q = loadMore && lastLogDoc
+        ? query(base, orderBy('createdAt', 'desc'), startAfter(lastLogDoc), limit(LOG_PAGE_SIZE))
+        : query(base, orderBy('createdAt', 'desc'), limit(LOG_PAGE_SIZE));
       const querySnapshot = await getDocs(q);
-      const fetched: DBLog[] = [];
-      querySnapshot.forEach((doc) => {
+      const fetched: DBLog[] = querySnapshot.docs.map((doc) => {
         const data = doc.data();
-        fetched.push({
+        return {
           id: doc.id,
           ...data,
           createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString('ja-JP') : '直近'
-        });
+        };
       });
-      setDbLogs(fetched);
+      setDbLogs((prev) => (loadMore ? [...prev, ...fetched] : fetched));
+      setLastLogDoc(querySnapshot.docs[querySnapshot.docs.length - 1] ?? (loadMore ? lastLogDoc : null));
+      setHasMoreLogs(querySnapshot.docs.length === LOG_PAGE_SIZE);
     } catch (e) {
       console.error('DB読み込みエラー:', e);
+      setLogsError('ログを読み込めませんでした。管理者として登録されたアカウントでログインしているか確認してください。');
     } finally {
       setIsLoadingLogs(false);
     }
@@ -164,27 +188,29 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
     }
 
     const headers = ['Document ID', 'UID', 'Device ID', 'Mode', 'Subject', 'Duration(Sec)', 'Memo', 'Created At'];
+    const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const rows = dbLogs.map(l => [
       l.id,
       l.uid || 'anonymous',
       l.deviceId || '',
       l.mode || '',
       l.subject || '',
-      l.durationSeconds || 0,
-      `"${(l.memo || '').replace(/"/g, '""')}"`,
+      getDurationSeconds(l),
+      l.memo || '',
       l.createdAt || ''
-    ]);
+    ].map(escape).join(','));
 
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' 
-      + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
+    const blob = new Blob(['\uFEFF' + [headers.map(escape).join(','), ...rows].join('\r\n')], {
+      type: 'text/csv;charset=utf-8'
+    });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', url);
     link.setAttribute('download', `research_logs_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // テストデータの初期化
@@ -369,12 +395,12 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">
                   <Database size={18} className="text-purple-400" /> Firestore 探究ログ (researchLogs)
                 </h2>
-                <p className="text-[10px] text-slate-400">直近50件のログを一覧確認・CSV出力できます</p>
+                <p className="text-[10px] text-slate-400">新しい順に50件ずつ表示します（読み込んだ分をCSV出力できます）</p>
               </div>
 
               <div className="flex gap-2">
                 <button
-                  onClick={fetchFirestoreLogs}
+                  onClick={() => fetchFirestoreLogs()}
                   disabled={isLoadingLogs}
                   className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition border border-slate-700"
                   title="更新"
@@ -389,6 +415,10 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
                 </button>
               </div>
             </div>
+
+            {logsError && (
+              <p className="text-xs text-red-400 font-bold">{logsError}</p>
+            )}
 
             <div className="overflow-x-auto border border-slate-800 rounded-2xl">
               <table className="w-full text-left text-[11px] text-slate-300">
@@ -421,7 +451,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
                           </span>
                         </td>
                         <td className="p-3 font-bold text-white">{log.subject}</td>
-                        <td className="p-3 font-mono font-bold text-green-400">{log.durationSeconds || 0} 秒</td>
+                        <td className="p-3 font-mono font-bold text-green-400">{getDurationSeconds(log)} 秒</td>
                         <td className="p-3 font-mono text-slate-500">{log.deviceId}</td>
                         <td className="p-3 text-slate-400 max-w-xs truncate">{log.memo || '-'}</td>
                       </tr>
@@ -430,6 +460,17 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
                 </tbody>
               </table>
             </div>
+
+            {hasMoreLogs && (
+              <button
+                onClick={() => fetchFirestoreLogs(true)}
+                disabled={isLoadingLogs}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-slate-200 font-bold rounded-xl text-xs transition border border-slate-700"
+              >
+                {isLoadingLogs ? '読み込み中...' : 'さらに50件読み込む'}
+              </button>
+            )}
+            <p className="text-[10px] text-slate-500 text-right">表示中: {dbLogs.length} 件</p>
           </div>
         )}
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Clock, 
   CheckSquare, 
@@ -25,6 +25,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { db, auth } from '../../firebase';
+import { getLocalAvatar, setLocalAvatar, resizeImageFile, isDataUrl } from '../../lib/avatar';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { updateProfile, signOut } from 'firebase/auth';
 
@@ -106,7 +107,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   useEffect(() => {
     if (user) {
       setDisplayName(user.displayName || '');
-      setPhotoURL(user.photoURL || '');
+      setPhotoURL(getLocalAvatar(user.uid) || user.photoURL || '');
     }
   }, [user]);
 
@@ -137,29 +138,37 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   };
 
   // タイマーカウント処理
+  // 実時間との差分で進めるため、タブが裏に回って処理が間引かれても時間がずれない
+  const secondsRef = useRef(seconds);
   useEffect(() => {
-    let interval: any = null;
-    if (isActive) {
-      interval = setInterval(() => {
-        if (timerMode === 'countup') {
-          setSeconds((sec) => sec + 1);
-          setElapsedSecondsCount((sec) => sec + 1);
-        } else {
-          setSeconds((sec) => {
-            if (sec <= 1) {
-              clearInterval(interval);
-              setIsActive(false);
-              alert('設定時間が経過しました！');
-              return 0;
-            }
-            return sec - 1;
-          });
-          setElapsedSecondsCount((sec) => sec + 1);
+    secondsRef.current = seconds;
+  }, [seconds]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    let lastTick = Date.now();
+    const interval = setInterval(() => {
+      const delta = Math.floor((Date.now() - lastTick) / 1000);
+      if (delta <= 0) return;
+      lastTick += delta * 1000;
+
+      if (timerMode === 'countup') {
+        setSeconds((sec) => sec + delta);
+        setElapsedSecondsCount((sec) => sec + delta);
+      } else {
+        const remaining = secondsRef.current;
+        const step = Math.min(delta, remaining);
+        const next = remaining - step;
+        secondsRef.current = next;
+        setSeconds(next);
+        setElapsedSecondsCount((sec) => sec + step);
+        if (next <= 0) {
+          clearInterval(interval);
+          setIsActive(false);
+          alert('設定時間が経過しました！');
         }
-      }, 1000);
-    } else {
-      clearInterval(interval);
-    }
+      }
+    }, 250);
     return () => clearInterval(interval);
   }, [isActive, timerMode]);
 
@@ -187,10 +196,17 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     setProfileMessage('');
 
     try {
-      await updateProfile(auth.currentUser, {
-        displayName: displayName,
-        photoURL: photoURL
-      });
+      // 端末内の画像は localStorage に保存し、Auth には URL の場合のみ保存する
+      if (isDataUrl(photoURL)) {
+        setLocalAvatar(auth.currentUser.uid, photoURL);
+        await updateProfile(auth.currentUser, { displayName: displayName });
+      } else {
+        setLocalAvatar(auth.currentUser.uid, null);
+        await updateProfile(auth.currentUser, {
+          displayName: displayName,
+          photoURL: photoURL || null
+        });
+      }
       setProfileMessage('プロフィールを保存しました！');
       setTimeout(() => setProfileMessage(''), 3000);
     } catch (error) {
@@ -201,19 +217,24 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     }
   };
 
-  // 画像ファイルアップロード (Base64変換)
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 画像ファイルアップロード（縮小してこの端末に保存）
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('画像サイズは2MB以下にしてください');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoURL(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('画像ファイルを選択してください');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('画像サイズは10MB以下にしてください');
+      return;
+    }
+    try {
+      setPhotoURL(await resizeImageFile(file));
+    } catch (error) {
+      console.error('画像の読み込みエラー:', error);
+      alert('画像を読み込めませんでした');
     }
   };
 
@@ -264,7 +285,8 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     setLogs(updatedLogs);
     localStorage.setItem(logKey, JSON.stringify(updatedLogs));
 
-    try {
+    // テスト環境では本番の研究データ（Firestore）に送信しない
+    if (!isTestEnv) try {
       let deviceId = localStorage.getItem('device_id');
       if (!deviceId) {
         deviceId = 'dev_' + Math.random().toString(36).substring(2, 10);
@@ -841,10 +863,10 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                     <div className="space-y-2">
                       <input
                         type="url"
-                        value={photoURL}
+                        value={isDataUrl(photoURL) ? '' : photoURL}
                         onChange={(e) => setPhotoURL(e.target.value)}
                         className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-                        placeholder="画像URLを入力 (https://...)"
+                        placeholder={isDataUrl(photoURL) ? '端末の画像を使用中（URLを入力すると置き換え）' : '画像URLを入力 (https://...)'}
                       />
                       <div className="relative">
                         <input

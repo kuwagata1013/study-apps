@@ -16,7 +16,9 @@ import {
   Volume2, 
   VolumeX, 
   Sparkles,
-  Heart
+  Heart,
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../../firebase';
@@ -24,6 +26,9 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface GamifiedAppProps {
   user?: any;
+  isTestEnv?: boolean;
+  onOpenAdmin?: () => void;
+  onResetMode?: () => void;
 }
 
 interface StudyLog {
@@ -44,7 +49,12 @@ interface Task {
   targetMinutes?: number;
 }
 
-export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
+export const GamifiedApp: React.FC<GamifiedAppProps> = ({
+  user,
+  isTestEnv = false,
+  onOpenAdmin,
+  onResetMode
+}) => {
   // 1. タブ管理
   const [activeTab, setActiveTab] = useState<'timer' | 'todo' | 'stats' | 'bgm' | 'profile'>('timer');
 
@@ -161,17 +171,17 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
 
   // タイマー作動中（isActive === true）の秒数カウント
   useEffect(() => {
-    let interval: any = null;
+    if (!isActive) return;
+    // 実時間との差分で進めるため、タブが裏に回って処理が間引かれても時間がずれない
+    let lastTick = Date.now();
+    const interval = setInterval(() => {
+      const delta = Math.floor((Date.now() - lastTick) / 1000);
+      if (delta <= 0) return;
+      lastTick += delta * 1000;
+      setSeconds((sec) => sec + delta);
+    }, 250);
 
-    if (isActive) {
-      interval = setInterval(() => {
-        setSeconds((sec) => sec + 1);
-      }, 1000);
-    }
-
-    return () => {
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [isActive]);
 
   // 歩行アニメーション：新しい8枚の画像を順番に切り替え
@@ -297,7 +307,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
 
     addExp(totalExpGained);
 
-    try {
+    // テスト環境では本番の研究データ（Firestore）に送信しない
+    if (!isTestEnv) try {
       let deviceId = localStorage.getItem('device_id');
       if (!deviceId) {
         deviceId = 'dev_' + Math.random().toString(36).substring(2, 10);
@@ -750,6 +761,30 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({ user }) => {
                     <span className="text-slate-500">アカウントID:</span>
                     <span className="font-mono text-slate-400">{user ? user.uid : 'anonymous'}</span>
                   </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <button
+                    onClick={() => {
+                      if (isActive) {
+                        alert('計測中はモードを変更できません。一度一時停止してください。');
+                        return;
+                      }
+                      onResetMode?.();
+                    }}
+                    className="w-full py-3 bg-slate-950 hover:bg-slate-800 text-slate-200 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-slate-800"
+                  >
+                    <RefreshCw size={16} />
+                    モードを再選択する（スタート画面へ）
+                  </button>
+
+                  <button
+                    onClick={() => onOpenAdmin?.()}
+                    className="w-full py-3 bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-purple-800/50"
+                  >
+                    <Lock size={16} />
+                    管理者用分析ページ（管理者アカウント限定）
+                  </button>
                 </div>
               </div>
             )}

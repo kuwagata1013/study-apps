@@ -174,11 +174,17 @@ export const App: React.FC = () => {
           user={user} 
           isTestEnv={isTestEnvironment} 
           onOpenAdmin={openAdminAuth}
+          onResetMode={handleResetMode}
         />
       )}
 
       {mode === 'gamified' && (
-        <GamifiedApp />
+        <GamifiedApp
+          user={user}
+          isTestEnv={isTestEnvironment}
+          onOpenAdmin={openAdminAuth}
+          onResetMode={handleResetMode}
+        />
       )}
 
       {mode === 'admin' && (
