@@ -93,23 +93,20 @@
   z-index: 5;
 }
 
-/* キャラクターは反転してたき火のほうを向き、丸太に腰かける。2コマを切り替えて呼吸 */
+/* キャラクターは反転してたき火のほうを向く。
+   腰から下を切り取り、丸太の後ろに置いて腰かけているように見せる */
 .camp-character {
-  bottom: 40px;
-  margin-left: -4px;
-  width: 112px;
+  bottom: 14px;
+  margin-left: -38px;
+  clip-path: inset(0 0 21% 0);
+  width: 192px;
   height: 192px;
+  object-fit: contain;
   transform: scaleX(-1);
+  transform-origin: bottom center;
   z-index: 4;
+  animation: camp-breathe 3.2s ease-in-out infinite;
 }
-.camp-character img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.camp-sit-a { animation: camp-frame-a 2.4s steps(1) infinite; }
-.camp-sit-b { animation: camp-frame-b 2.4s steps(1) infinite; }
 
 .camp-caption {
   position: absolute;
@@ -135,7 +132,10 @@
     zoom: 0.85;
   }
   .camp-character {
-    zoom: 0.85;
+    width: 168px;
+    height: 168px;
+    bottom: 16px;
+    margin-left: -36px;
   }
   .camp-caption {
     font-size: 10px;
@@ -179,12 +179,17 @@
   100% { opacity: 0; transform: translate(-14px, -80px) scale(1.8); }
 }
 
+@keyframes camp-breathe {
+  0%, 100% { transform: scaleX(-1) translateY(0); }
+  50% { transform: scaleX(-1) translateY(-2px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .camp-glow,
   .camp-flame,
   .camp-spark,
   .camp-smoke,
-  .camp-character img {
+  .camp-character {
     animation: none !important;
   }
 }

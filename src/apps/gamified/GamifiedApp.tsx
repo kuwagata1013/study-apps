@@ -23,10 +23,6 @@ import {
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
-import { WALK_FRAME_MS, WALK_FRAME_COUNT, CHARACTER_WIDTH, CHARACTER_HEIGHT } from './walkConfig';
-import { getWalkFrames } from './characterSprite';
-
-const WALK_FRAME_URLS = getWalkFrames();
 import { saveResearchLog } from '../../lib/researchLog';
 import { getParticipantId } from '../../lib/participant';
 
@@ -202,8 +198,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
     if (isActive) {
       animInterval = setInterval(() => {
-        setCurrentFrame((prev) => (prev % WALK_FRAME_COUNT) + 1);
-      }, WALK_FRAME_MS); // 背景の流れる速さ（walkConfig.ts）と連動
+        setCurrentFrame((prev) => (prev % 8) + 1);
+      }, 220); // 速度（ミリ秒）はお好みで調整可能です
     } else {
       setCurrentFrame(1); // 停止時は1番の画像に戻す
     }
@@ -446,27 +442,19 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   {/* 動く森の背景（学習中は景色が流れる） */}
                   <ForestBackground moving={isActive} />
 
-                  {/* アバター描画：元のイラストをもとにしたドット絵の12コマ（characterSprite.ts）。足元を小道に合わせる */}
+                  {/* アバター描画：新しい8枚の画像（tankyu1〜8.png）を使用。足元を小道に合わせる */}
                   {isActive && (
-                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[48px] z-10">
-                      {/* 全コマを重ねて置き、表示するコマだけ切り替える */}
-                      <div className="relative" style={{ height: CHARACTER_HEIGHT, width: CHARACTER_WIDTH }}>
-                        {WALK_FRAME_URLS.map((src, i) => (
-                          <img
-                            key={i}
-                            src={src}
-                            alt={i + 1 === currentFrame ? '冒険者アバター歩行中' : ''}
-                            aria-hidden={i + 1 !== currentFrame}
-                            className="absolute inset-0 w-full h-full [image-rendering:pixelated]"
-                            style={{ visibility: i + 1 === currentFrame ? 'visible' : 'hidden' }}
-                          />
-                        ))}
-                      </div>
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[38px] z-10">
+                      <img 
+                        src={`/tankyu${currentFrame}.png`} 
+                        alt="冒険者アバター歩行中" 
+                        className="w-48 h-48 md:w-64 md:h-64 object-contain [image-rendering:pixelated]"
+                      />
                     </div>
                   )}
 
                   {/* 休憩中はたき火でキャンプ */}
-                  {!isActive && <CampScene />}
+                  {!isActive && <CampScene characterSrc="/tankyu1.png" />}
                 </div>
               </div>
             </div>

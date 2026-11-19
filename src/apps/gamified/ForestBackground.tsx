@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import './ForestBackground.css';
-import { GROUND_SPEED } from './walkConfig';
 
 // キャラクター（ドット絵）に合わせた、ドット絵風の動く森の背景。
 // 遠景・中景・近景を別々の速さで横に流して奥行きを出す（パララックス）。
@@ -198,10 +197,9 @@ interface ForestBackgroundProps {
 export const ForestBackground: React.FC<ForestBackgroundProps> = ({ moving }) => {
   const layers = useMemo(
     () => [
-      // 近景は歩幅に合わせた速さ。奥ほどゆっくり流して奥行きを出す
-      { key: 'far', ...buildFar(), speed: GROUND_SPEED * 0.12, bottom: 22 },
-      { key: 'mid', ...buildMid(), speed: GROUND_SPEED * 0.38, bottom: 14 },
-      { key: 'near', ...buildNear(), speed: GROUND_SPEED, bottom: 0 }
+      { key: 'far', ...buildFar(), speed: 8, bottom: 22 },
+      { key: 'mid', ...buildMid(), speed: 22, bottom: 14 },
+      { key: 'near', ...buildNear(), speed: 60, bottom: 0 }
     ],
     []
   );
