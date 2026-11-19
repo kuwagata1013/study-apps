@@ -26,7 +26,6 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface GamifiedAppProps {
   user?: any;
-  isTestEnv?: boolean;
   onOpenAdmin?: () => void;
   onResetMode?: () => void;
 }
@@ -51,7 +50,6 @@ interface Task {
 
 export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   user,
-  isTestEnv = false,
   onOpenAdmin,
   onResetMode
 }) => {
@@ -307,8 +305,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
     addExp(totalExpGained);
 
-    // テスト環境では本番の研究データ（Firestore）に送信しない
-    if (!isTestEnv) try {
+    try {
       let deviceId = localStorage.getItem('device_id');
       if (!deviceId) {
         deviceId = 'dev_' + Math.random().toString(36).substring(2, 10);

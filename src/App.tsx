@@ -11,7 +11,7 @@ import StartApp from './apps/start/StartApp';
 import GamifiedApp from './apps/gamified/GamifiedApp';
 import SimpleApp from './apps/simple/SimpleApp';
 import AdminApp from './apps/admin/AdminApp';
-import { Settings, LogOut, User, RefreshCw, Save, Shield, Upload, Lock, FlaskConical } from 'lucide-react';
+import { Settings, LogOut, User, RefreshCw, Save, Shield, Upload, Lock } from 'lucide-react';
 
 type AppMode = 'start' | 'simple' | 'gamified' | 'admin';
 
@@ -25,8 +25,6 @@ export const App: React.FC = () => {
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(false);
   const [adminAuthError, setAdminAuthError] = useState('');
 
-  // テスト環境モードフラグ
-  const [isTestEnvironment, setIsTestEnvironment] = useState(false);
 
   // プロフィール編集用ステート
   const [displayName, setDisplayName] = useState('');
@@ -149,21 +147,6 @@ export const App: React.FC = () => {
 
   return (
     <div className="relative min-h-screen bg-gray-50">
-      {/* テスト環境バナー */}
-      {isTestEnvironment && (
-        <div className="bg-amber-500 text-white text-[11px] font-bold py-1 px-4 text-center sticky top-0 z-50 flex justify-between items-center shadow-sm">
-          <span className="flex items-center gap-1">
-            <FlaskConical size={14} /> テストシミュレーション環境（本番データには影響しません）
-          </span>
-          <button 
-            onClick={() => setIsTestEnvironment(false)}
-            className="underline hover:opacity-80"
-          >
-            テスト終了
-          </button>
-        </div>
-      )}
-
       {/* メイン画面切替 */}
       {mode === 'start' && (
         <StartApp onSelectMode={handleSelectMode} user={user} />
@@ -172,7 +155,6 @@ export const App: React.FC = () => {
       {mode === 'simple' && (
         <SimpleApp 
           user={user} 
-          isTestEnv={isTestEnvironment} 
           onOpenAdmin={openAdminAuth}
           onResetMode={handleResetMode}
         />
@@ -181,14 +163,13 @@ export const App: React.FC = () => {
       {mode === 'gamified' && (
         <GamifiedApp
           user={user}
-          isTestEnv={isTestEnvironment}
           onOpenAdmin={openAdminAuth}
           onResetMode={handleResetMode}
         />
       )}
 
       {mode === 'admin' && (
-        <AdminApp onExitAdmin={() => setMode('start')} isTestEnv={isTestEnvironment} />
+        <AdminApp onExitAdmin={() => setMode('start')} />
       )}
 
       {/* 
@@ -303,21 +284,6 @@ export const App: React.FC = () => {
               >
                 <RefreshCw size={16} />
                 モードを再選択する（スタート画面へ）
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsTestEnvironment(!isTestEnvironment);
-                  setIsSettingsOpen(false);
-                }}
-                className={`w-full py-3 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border ${
-                  isTestEnvironment 
-                    ? 'bg-amber-100 text-amber-800 border-amber-300' 
-                    : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
-                }`}
-              >
-                <FlaskConical size={16} />
-                {isTestEnvironment ? 'テスト環境モードを終了' : 'テスト環境モードを起動'}
               </button>
 
               <button

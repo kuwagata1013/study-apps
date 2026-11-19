@@ -31,7 +31,6 @@ import { updateProfile, signOut } from 'firebase/auth';
 
 interface SimpleAppProps {
   user?: any;
-  isTestEnv?: boolean;
   onSelectMode?: (mode: 'simple' | 'gamified') => void;
   onOpenAdmin?: () => void;
   onResetMode?: () => void; // モード切替（スタート画面へ戻る）用コールバック
@@ -58,7 +57,6 @@ interface Task {
 
 export const SimpleApp: React.FC<SimpleAppProps> = ({ 
   user, 
-  isTestEnv = false, 
   onOpenAdmin,
   onResetMode 
 }) => {
@@ -174,8 +172,8 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
   // LocalStorage からデータ読み込み
   useEffect(() => {
-    const logKey = isTestEnv ? 'test_simple_study_logs' : 'simple_study_logs';
-    const taskKey = isTestEnv ? 'test_simple_tasks' : 'simple_tasks';
+    const logKey = 'simple_study_logs';
+    const taskKey = 'simple_tasks';
 
     const savedLogs = localStorage.getItem(logKey);
     if (savedLogs) {
@@ -185,7 +183,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     if (savedTasks) {
       try { setTasks(JSON.parse(savedTasks)); } catch (e) {}
     }
-  }, [isTestEnv]);
+  }, []);
 
   // プロフィール更新
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -280,13 +278,12 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       memo
     };
 
-    const logKey = isTestEnv ? 'test_simple_study_logs' : 'simple_study_logs';
+    const logKey = 'simple_study_logs';
     const updatedLogs = [newLog, ...logs];
     setLogs(updatedLogs);
     localStorage.setItem(logKey, JSON.stringify(updatedLogs));
 
-    // テスト環境では本番の研究データ（Firestore）に送信しない
-    if (!isTestEnv) try {
+    try {
       let deviceId = localStorage.getItem('device_id');
       if (!deviceId) {
         deviceId = 'dev_' + Math.random().toString(36).substring(2, 10);
@@ -296,13 +293,12 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       await addDoc(collection(db, 'researchLogs'), {
         uid: user ? user.uid : 'anonymous',
         deviceId: deviceId,
-        mode: isTestEnv ? 'simple_test' : 'simple',
+        mode: 'simple',
         subject: finalSubject,
         durationSeconds: recordSeconds,
         durationMinutes: Math.round(recordSeconds / 60),
         memo: memo,
-        createdAt: serverTimestamp(),
-        isTestEnv: isTestEnv
+        createdAt: serverTimestamp()
       });
     } catch (e) {
       console.error('Firestore保存エラー:', e);
@@ -327,7 +323,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       dueDate: newTaskDueDate || undefined
     };
 
-    const taskKey = isTestEnv ? 'test_simple_tasks' : 'simple_tasks';
+    const taskKey = 'simple_tasks';
     const updated = [newTask, ...tasks];
     setTasks(updated);
     localStorage.setItem(taskKey, JSON.stringify(updated));
@@ -338,7 +334,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
   // ToDo 完了処理
   const toggleTask = (id: string) => {
-    const taskKey = isTestEnv ? 'test_simple_tasks' : 'simple_tasks';
+    const taskKey = 'simple_tasks';
     const now = new Date();
     const dateKey = now.toISOString().split('T')[0];
 
@@ -360,7 +356,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
   // ToDo 削除
   const deleteTask = (id: string) => {
-    const taskKey = isTestEnv ? 'test_simple_tasks' : 'simple_tasks';
+    const taskKey = 'simple_tasks';
     const updated = tasks.filter((t) => t.id !== id);
     setTasks(updated);
     localStorage.setItem(taskKey, JSON.stringify(updated));

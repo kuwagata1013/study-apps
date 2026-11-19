@@ -3,7 +3,6 @@ import {
   Shield, 
   Music, 
   Database, 
-  FlaskConical, 
   LogOut, 
   Plus, 
   Trash2, 
@@ -33,7 +32,6 @@ const getDurationSeconds = (log: { durationSeconds?: number; durationMinutes?: n
 
 interface AdminAppProps {
   onExitAdmin: () => void;
-  isTestEnv?: boolean;
 }
 
 interface BgmTrack {
@@ -54,8 +52,8 @@ interface DBLog {
   createdAt?: any;
 }
 
-export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = false }) => {
-  const [activeTab, setActiveTab] = useState<'bgm' | 'database' | 'testenv'>('bgm');
+export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
+  const [activeTab, setActiveTab] = useState<'bgm' | 'database'>('bgm');
 
   // --- 1. BGM管理用ステート ---
   const [bgmList, setBgmList] = useState<BgmTrack[]>([
@@ -213,15 +211,6 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
     URL.revokeObjectURL(url);
   };
 
-  // テストデータの初期化
-  const handleResetTestData = () => {
-    if (confirm('テスト環境のローカルデータ（ログ・ToDo）を初期化しますか？')) {
-      localStorage.removeItem('test_simple_study_logs');
-      localStorage.removeItem('test_simple_tasks');
-      alert('テストデータをリセットしました');
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 pb-12 antialiased">
       
@@ -235,9 +224,8 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
             <div>
               <h1 className="text-base font-bold text-white flex items-center gap-2">
                 システム管理コントロールパネル
-                {isTestEnv && <span className="text-[10px] bg-amber-500 text-white font-bold px-2 py-0.5 rounded-full">テスト環境</span>}
               </h1>
-              <p className="text-[10px] text-slate-400">BGMの追加・削除・データ分析・検証</p>
+              <p className="text-[10px] text-slate-400">BGMの追加・削除・データ分析</p>
             </div>
           </div>
 
@@ -271,15 +259,6 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
             }`}
           >
             <Database size={16} /> DBデータ確認
-          </button>
-
-          <button
-            onClick={() => setActiveTab('testenv')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-              activeTab === 'testenv' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <FlaskConical size={16} /> テスト環境・検証
           </button>
         </div>
 
@@ -471,33 +450,6 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin, isTestEnv = fal
               </button>
             )}
             <p className="text-[10px] text-slate-500 text-right">表示中: {dbLogs.length} 件</p>
-          </div>
-        )}
-
-        {/* ===== TAB 3: テスト環境管理 ===== */}
-        {activeTab === 'testenv' && (
-          <div className="bg-slate-950 rounded-3xl p-6 border border-slate-800 space-y-4">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <FlaskConical size={18} className="text-amber-400" /> テスト環境データ管理
-            </h2>
-            <p className="text-xs text-slate-400">
-              テスト環境で作成された仮のローカルデータを一括リセットできます。
-            </p>
-
-            <div className="p-4 bg-slate-900 rounded-2xl border border-slate-800 space-y-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-xs font-bold text-white">テストデータの完全リセット</p>
-                  <p className="text-[10px] text-slate-500">テスト環境用ローカルストレージのデータをクリアします</p>
-                </div>
-                <button
-                  onClick={handleResetTestData}
-                  className="px-3 py-2 bg-red-900/40 hover:bg-red-900/60 text-red-300 font-bold rounded-xl text-xs transition border border-red-800"
-                >
-                  テストデータを初期化
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
