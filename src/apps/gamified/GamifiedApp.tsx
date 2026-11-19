@@ -21,6 +21,7 @@ import {
   Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import ForestBackground from './ForestBackground';
 import { saveResearchLog } from '../../lib/researchLog';
 import { getParticipantId } from '../../lib/participant';
 
@@ -436,15 +437,17 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
             <div className="w-full md:w-3/4 flex flex-col">
               <div className={`flex-1 bg-gradient-to-b ${getStageBackground()} rounded-3xl p-5 shadow-xl border relative overflow-hidden flex flex-col items-center justify-center space-y-3`}>
                 
-                <div className="w-full flex-1 min-h-[320px] md:min-h-[420px] bg-slate-950/80 rounded-2xl border border-slate-800 relative overflow-hidden flex items-center justify-center shadow-inner">
-                  
-                  {/* アバター描画：新しい8枚の画像（tankyu1〜8.png）を使用 */}
+                <div className="w-full flex-1 min-h-[320px] md:min-h-[420px] rounded-2xl border border-slate-800 relative overflow-hidden shadow-inner">
+                  {/* 動く森の背景（学習中は景色が流れる） */}
+                  <ForestBackground moving={isActive} />
+
+                  {/* アバター描画：新しい8枚の画像（tankyu1〜8.png）を使用。足元を小道に合わせる */}
                   {isActive && (
-                    <div className="z-10 flex flex-col items-center">
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[38px] z-10">
                       <img 
                         src={`/tankyu${currentFrame}.png`} 
                         alt="冒険者アバター歩行中" 
-                        className="w-48 h-48 md:w-64 md:h-64 object-contain"
+                        className="w-48 h-48 md:w-64 md:h-64 object-contain [image-rendering:pixelated]"
                       />
                     </div>
                   )}
