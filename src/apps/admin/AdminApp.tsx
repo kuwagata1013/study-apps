@@ -11,6 +11,7 @@ import {
   Pause
 } from 'lucide-react';
 import ResearchDataPanel from './ResearchDataPanel';
+import { resolveSoundUrl } from '../../offline/ambient';
 
 interface AdminAppProps {
   onExitAdmin: () => void;
@@ -22,15 +23,25 @@ interface BgmTrack {
   url: string;
 }
 
+// オフライン版では音源をダウンロードせず、その場で合成した環境音を使う
+const DEFAULT_BGM_LIST: BgmTrack[] =
+  import.meta.env.MODE === 'offline'
+    ? [
+        { id: '1', name: '雨の音', url: 'offline:rain' },
+        { id: '2', name: '波の音', url: 'offline:waves' },
+        { id: '3', name: 'カフェの環境音', url: 'offline:cafe' }
+      ]
+    : [
+        { id: '1', name: '雨の音', url: 'https://cdn.pixabay.com/download/audio/2021/09/06/audio_4125a254ec.mp3' },
+        { id: '2', name: '波の音', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3' },
+        { id: '3', name: 'カフェの環境音', url: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a77d13.mp3' }
+      ];
+
 export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
   const [activeTab, setActiveTab] = useState<'bgm' | 'database'>('bgm');
 
   // --- 1. BGM管理用ステート ---
-  const [bgmList, setBgmList] = useState<BgmTrack[]>([
-    { id: '1', name: '雨の音', url: 'https://cdn.pixabay.com/download/audio/2021/09/06/audio_4125a254ec.mp3' },
-    { id: '2', name: '波の音', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3' },
-    { id: '3', name: 'カフェの環境音', url: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a77d13.mp3' }
-  ]);
+  const [bgmList, setBgmList] = useState<BgmTrack[]>(DEFAULT_BGM_LIST);
   const [newBgmName, setNewBgmName] = useState('');
   const [newBgmUrl, setNewBgmUrl] = useState('');
   const [previewAudio, setPreviewAudio] = useState<{ id: string; audio: HTMLAudioElement } | null>(null);
@@ -104,7 +115,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
       setPreviewAudio(null);
     } else {
       if (previewAudio) previewAudio.audio.pause();
-      const audio = new Audio(track.url);
+      const audio = new Audio(resolveSoundUrl(track.url));
       audio.play().catch(() => alert('音源の再生に失敗しました（URLが無効の可能性があります）'));
       setPreviewAudio({ id: track.id, audio });
     }

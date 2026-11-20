@@ -28,3 +28,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# オフライン版のビルド結果
+dist-offline

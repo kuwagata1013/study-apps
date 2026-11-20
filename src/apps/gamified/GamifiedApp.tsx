@@ -23,10 +23,12 @@ import {
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
+import walkSheetUrl from '../../assets/character/walk_sheet.png';
+import sitUrl from '../../assets/character/sit.png';
 
-// 歩行アニメーション：1枚の画像（public/character/walk_sheet.png、624 × 864 px、4列 × 3段）に
+// 歩行アニメーション：1枚の画像（src/assets/character/walk_sheet.png、624 × 864 px、4列 × 3段）に
 // 並んだ12コマで1周（左右1歩ずつ）。表示するコマの部分だけを映す
-const WALK_SHEET = { src: '/character/walk_sheet.png', width: 624, height: 864 };
+const WALK_SHEET = { src: walkSheetUrl, width: 624, height: 864 };
 // 1コマを切り出す枠の大きさ（px）。頭の中心と足の裏をそろえて、コマごとの位置のずれをなくしている
 const WALK_BOX = { width: 154, height: 283 };
 // 各コマの枠の左上の位置（シート上の px）
@@ -476,7 +478,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   )}
 
                   {/* 休憩中はたき火でキャンプ */}
-                  {!isActive && <CampScene characterSrc="/character/sit.png" />}
+                  {!isActive && <CampScene characterSrc={sitUrl} />}
                 </div>
               </div>
             </div>

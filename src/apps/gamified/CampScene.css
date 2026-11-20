@@ -93,7 +93,7 @@
   z-index: 5;
 }
 
-/* 座っているキャラクター（public/character/sit.png、117 × 211 px を 0.75 倍で表示）。
+/* 座っているキャラクター（src/assets/character/sit.png、117 × 211 px を 0.75 倍で表示）。
    反転してたき火のほうを向き、丸太に腰かける。脚は丸太の手前に出す */
 .camp-character {
   bottom: 30px;
