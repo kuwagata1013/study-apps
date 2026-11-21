@@ -14,6 +14,9 @@ import {
 import ResearchDataPanel from './ResearchDataPanel';
 import ParticipantAccountsPanel from './ParticipantAccountsPanel';
 import IssueAccountsForm from './IssueAccountsForm';
+import AdminAccountsPanel from './AdminAccountsPanel';
+import { auth } from '../../firebase';
+import { recordAdminProfile } from '../../lib/admins';
 import { BGM_SOURCES } from '../../lib/bgm';
 
 interface AdminAppProps {
@@ -47,6 +50,12 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
   const [newBgmName, setNewBgmName] = useState('');
   const [newBgmUrl, setNewBgmUrl] = useState('');
   const [previewAudio, setPreviewAudio] = useState<{ id: string; audio: HTMLAudioElement } | null>(null);
+
+  // 管理画面を開いたら、自分のメールアドレスを管理者の一覧に残す（管理者どうしで誰かわかるように）
+  useEffect(() => {
+    const me = auth.currentUser;
+    if (me) recordAdminProfile(me.uid, me.email).catch((e) => console.error('管理者情報の保存に失敗:', e));
+  }, []);
 
   useEffect(() => {
     const savedBgm = localStorage.getItem('admin_custom_bgm_list');
@@ -301,6 +310,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
         {/* ===== TAB 3: 参加者ID・名前・アカウントの対応 ===== */}
         {activeTab === 'accounts' && (
           <div className="space-y-6">
+            <AdminAccountsPanel />
             <IssueAccountsForm onIssued={() => setAccountsVersion((v) => v + 1)} />
             <ParticipantAccountsPanel key={accountsVersion} />
           </div>

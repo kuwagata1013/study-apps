@@ -4,6 +4,7 @@ import {
   RefreshCw, Timer, Users, Clock, X
 } from 'lucide-react';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { fetchAdminUids } from '../../lib/admins';
 import { db } from '../../firebase';
 import { DATASET_NAME_MAX, datasetLabel, fetchDatasetInfo, renameDataset, startNextDataset } from '../../lib/dataset';
 import { downloadXlsx, type Sheet } from '../../lib/xlsx';
@@ -283,16 +284,22 @@ export const ResearchDataPanel: React.FC = () => {
   const [participantFilter, setParticipantFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  // 管理者（Google でログインした研究者）の記録を集計から除く（最初は除く）
+  const [adminUids, setAdminUids] = useState<Set<string>>(new Set());
+  const [excludeAdmins, setExcludeAdmins] = useState(true);
 
   const fetchLogs = async () => {
     setIsLoading(true);
     setError('');
     setEventError('');
-    const [logResult, eventResult, datasetResult] = await Promise.allSettled([
+    const [logResult, eventResult, datasetResult, adminResult] = await Promise.allSettled([
       getDocs(query(collection(db, 'researchLogs'), orderBy('createdAt', 'desc'))),
       getDocs(query(collection(db, 'researchEvents'), orderBy('createdAt', 'desc'))),
-      fetchDatasetInfo()
+      fetchDatasetInfo(),
+      fetchAdminUids()
     ]);
+    if (adminResult.status === 'fulfilled') setAdminUids(new Set(adminResult.value));
+    else console.error('管理者一覧の読み込みエラー:', adminResult.reason);
     if (datasetResult.status === 'fulfilled') {
       const { current, names } = datasetResult.value;
       setCurrentDataset(current);
@@ -321,16 +328,24 @@ export const ResearchDataPanel: React.FC = () => {
   }, []);
 
   // 参加者の選択肢（全期間・全モード）
+  const isAdminRecord = useMemo(() => (r: { uid: string }) => excludeAdmins && adminUids.has(r.uid), [excludeAdmins, adminUids]);
   const participantOptions = useMemo(() => {
     const map = new Map<string, string>();
-    logs.forEach((l) => map.set(l.participantKey, l.participantLabel));
-    events.forEach((e) => map.set(e.participantKey, e.participantLabel));
+    logs.forEach((l) => !isAdminRecord(l) && map.set(l.participantKey, l.participantLabel));
+    events.forEach((e) => !isAdminRecord(e) && map.set(e.participantKey, e.participantLabel));
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], 'ja'));
-  }, [logs, events]);
+  }, [logs, events, isAdminRecord]);
+
+  // 管理者の記録の件数（除いた件数として表示する）
+  const adminCounts = useMemo(
+    () => ({ logs: logs.filter((l) => adminUids.has(l.uid)).length, events: events.filter((e) => adminUids.has(e.uid)).length }),
+    [logs, events, adminUids]
+  );
 
   // 絞り込み条件（記録・行動データ共通）
   const matches = useMemo(
-    () => (r: { mode: string; participantKey: string; dataset: number }, at: Date | null) => {
+    () => (r: { uid: string; mode: string; participantKey: string; dataset: number }, at: Date | null) => {
+      if (isAdminRecord(r)) return false;
       if (datasetFilter && datasetFilter !== 'all' && String(r.dataset) !== datasetFilter) return false;
       if (modeFilter !== 'all' && r.mode !== modeFilter) return false;
       if (participantFilter !== 'all' && r.participantKey !== participantFilter) return false;
@@ -339,7 +354,7 @@ export const ResearchDataPanel: React.FC = () => {
       if (dateTo && (!day || day > dateTo)) return false;
       return true;
     },
-    [datasetFilter, modeFilter, participantFilter, dateFrom, dateTo]
+    [datasetFilter, modeFilter, participantFilter, dateFrom, dateTo, isAdminRecord]
   );
 
   const filtered = useMemo(() => logs.filter((l) => matches(l, l.endedAt)), [logs, matches]);
@@ -666,6 +681,7 @@ export const ResearchDataPanel: React.FC = () => {
         ['モード', modeFilter === 'all' ? 'すべて' : modeLabel(modeFilter)],
         ['参加者', participantFilter === 'all' ? '全員' : participantFilter],
         ['期間', dateFrom || dateTo ? `${dateFrom || '最初'} 〜 ${dateTo || '最後'}` : 'すべて'],
+        ['管理者アカウントの記録', excludeAdmins ? `除いた（管理者 ${adminUids.size} 人）` : '含む'],
         ['出力日時', dateTimeText(new Date())],
         ['学習記録', `${filtered.length} 件`],
         ['行動記録', `${filteredEvents.length} 件`]
@@ -855,6 +871,22 @@ export const ResearchDataPanel: React.FC = () => {
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={inputCls} />
           </label>
         </div>
+        <label className="flex items-start gap-2 p-3 rounded-2xl bg-purple-950/40 border border-purple-900/60 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={excludeAdmins}
+            onChange={(e) => setExcludeAdmins(e.target.checked)}
+            className="mt-0.5 accent-purple-500"
+          />
+          <span className="text-[11px] text-neutral-200 leading-relaxed">
+            <span className="font-bold">管理者アカウントの記録を除く</span>
+            <span className="block text-neutral-400">
+              管理者 {adminUids.size} 人・学習記録 {adminCounts.logs} 件・行動データ {adminCounts.events} 件
+              {excludeAdmins ? 'を集計と CSV から除いています' : 'も含めて集計しています'}
+              （ログインせずに試した記録は、管理者のものか区別できないので除けません）
+            </span>
+          </span>
+        </label>
       </div>
 
       {/* 概要 */}

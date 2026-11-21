@@ -117,7 +117,7 @@ export const App: React.FC = () => {
   // 参加者IDをアカウントに結び付ける
   // - アカウントに登録済みなら、この端末の参加者IDをそれに合わせる
   // - まだなら、この端末で使っている参加者IDを登録する（最初の1回だけ）
-  // - ログアウトしたら、アカウントから来た参加者IDはこの端末から消して、スタート画面で入れ直してもらう
+  // - ログアウトしたら、アカウントから来た参加者IDはこの端末から消して、スタート画面に戻す（ログインしないと使えない）
   const backToStartIfNoPid = () => {
     if (!isValidParticipantId(getParticipantId())) setMode((m) => (m === 'simple' || m === 'gamified' ? 'start' : m));
   };
@@ -131,8 +131,9 @@ export const App: React.FC = () => {
       if (owner) {
         clearParticipantId();
         clearParticipantOwner();
-        backToStartIfNoPid();
       }
+      // ログインしていなければ使えない（参加者IDとパスワードでログインしてもらう）ので、スタート画面に戻す
+      setMode((m) => (m === 'simple' || m === 'gamified' ? 'start' : m));
       return;
     }
     // 別のアカウントの参加者IDが残っていたら使わない

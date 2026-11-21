@@ -9,10 +9,22 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // 管理者リスト: 自分のドキュメントの有無だけ確認できる。追加・削除は Firebase コンソールから行う
+    // 管理者リスト: 自分のドキュメントの有無は誰でも確認できる。一覧は管理者だけ（集計から管理者を除くため）
+    // 追加・削除は Firebase コンソールから行う
     match /admins/{uid} {
-      allow get: if request.auth != null && request.auth.uid == uid;
-      allow list, write: if false;
+      allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
+    // 管理者のメールアドレス（管理画面を開いたときに本人が書く）。読めるのは管理者だけ
+    match /adminProfiles/{uid} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email', 'lastSeenAt'])
+        && request.resource.data.email is string && request.resource.data.email.size() <= 200
+        && request.resource.data.lastSeenAt == request.time;
+      allow delete: if false;
     }
 
     // 学習ログ: 誰でも1件ずつ追加できる（ゲスト含む）。閲覧は管理者のみ。変更・削除は不可

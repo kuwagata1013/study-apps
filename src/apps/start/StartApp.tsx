@@ -84,9 +84,20 @@ export const StartApp: React.FC<StartAppProps> = ({
   const [nameSaving, setNameSaving] = useState(false);
   const [nameError, setNameError] = useState('');
   const needsName = !!user && nameStatus !== 'ready';
-  // 名前のステップは、名前がまだ決まっていないときと変更中だけ出す（決まっていれば STEP 1 に名前を表示する）
-  const showNameStep = !!user && (nameStatus !== 'ready' || editingName);
-  const idStep = showNameStep ? 3 : 2;
+  // ステップの出し方
+  // - ログイン前：1 ログイン → 2 プレイヤー名（ログイン後に決める）→ 3 モード
+  // - 名前が決まっていれば名前のステップは出さない（STEP 1 に名前を表示する）
+  // - 参加者IDの入力は、Google でログインした人（管理者など）で、まだアカウントに登録されていないときだけ
+  //   （参加者ID＋パスワードでログインした人は、ログインしたIDがそのまま参加者IDになる）
+  const isParticipantUser = !!participantIdFromEmail(user?.email);
+  const showNameStep = !user || nameStatus !== 'ready' || editingName;
+  const showPidStep = !!user && !isParticipantUser && !lockedParticipantId;
+  const pidStep = showNameStep ? 3 : 2;
+  const modeStep = pidStep + (showPidStep ? 1 : 0);
+  // モード選択のエラー（ログインした・ログアウトしたら消えるよう、そのときのアカウントと一緒に持つ）
+  const [modeErrorState, setModeErrorState] = useState<{ text: string; uid: string | null }>({ text: '', uid: null });
+  const modeError = modeErrorState.uid === (user?.uid ?? null) ? modeErrorState.text : '';
+  const setModeError = (text: string) => setModeErrorState({ text, uid: user?.uid ?? null });
   const startEditingName = () => {
     setNameInput(playerName);
     setNameError('');
@@ -107,6 +118,7 @@ export const StartApp: React.FC<StartAppProps> = ({
       const result = await claimPlayerName(user.uid, name, playerName || undefined);
       if (result === 'ok') {
         onNameSaved?.(name);
+        setModeError('');
         setEditingName(false);
       } else {
         setNameError(result === 'taken' ? 'この名前はほかの人が使っています。別の名前にしてください' : 'この名前は使えません');
@@ -126,16 +138,24 @@ export const StartApp: React.FC<StartAppProps> = ({
 
   // 参加者IDを確認・保存してからモードを開始
   const handleSelectMode = (mode: 'simple' | 'gamified') => {
+    setModeError('');
+    if (!user) {
+      setModeError('先に STEP 1 で、配られた参加者IDとパスワードでログインしてください');
+      return;
+    }
     if (needsName) {
-      setNameError(nameStatus === 'checking' ? '名前を確認中です。少し待ってからもう一度押してください' : '先にプレイヤー名を決めてください');
+      const msg = nameStatus === 'checking' ? '名前を確認中です。少し待ってからもう一度押してください' : '先にプレイヤー名を決めてください';
+      setNameError(msg);
+      setModeError(msg);
       return;
     }
     if (participantChecking) {
-      setParticipantError('参加者IDを確認中です。少し待ってからもう一度押してください');
+      setModeError('参加者IDを確認中です。少し待ってからもう一度押してください');
       return;
     }
     if (!isParticipantValid) {
-      setParticipantError('参加者IDを入力してください（半角英数字・ハイフン・アンダースコア、32文字まで）');
+      if (showPidStep) setParticipantError('参加者IDを入力してください（半角英数字・ハイフン・アンダースコア、32文字まで）');
+      else setModeError('参加者IDを確認できませんでした。通信状態を確認して、ログインし直してください');
       return;
     }
     saveParticipantId(participantId);
@@ -214,7 +234,9 @@ export const StartApp: React.FC<StartAppProps> = ({
                     )}
                   </div>
                   <p className="text-[10px] text-gray-400 truncate">
-                    {participantIdFromEmail(user.email) ? `参加者ID：${lockedParticipantId || participantIdFromEmail(user.email)}` : user.email}
+                    {isParticipantUser
+                      ? `参加者ID：${lockedParticipantId || participantIdFromEmail(user.email)}`
+                      : `${user.email ?? ''}${lockedParticipantId ? ` ・ 参加者ID：${lockedParticipantId}` : ''}`}
                   </p>
                 </div>
               </div>
@@ -280,7 +302,7 @@ export const StartApp: React.FC<StartAppProps> = ({
           )}
         </div>
 
-        {/* STEP 2: プレイヤー名（ログインしていて、名前がまだのときと変更中だけ） */}
+        {/* STEP 2: プレイヤー名（ログイン前は案内だけ。ログイン後、名前がまだのときと変更中に入力する） */}
         {showNameStep && (
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
             <div className="text-center">
@@ -289,7 +311,17 @@ export const StartApp: React.FC<StartAppProps> = ({
               </span>
             </div>
 
-            {nameStatus === 'checking' ? (
+            {!user ? (
+              <div className="space-y-1.5 opacity-60">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                  <UserRound size={14} /> プレイヤー名（{MAX_NAME_LENGTH}文字まで）
+                </span>
+                <div className="px-3 py-2.5 text-sm border border-dashed border-gray-300 rounded-xl bg-gray-50 text-gray-400">
+                  ログインすると決められます
+                </div>
+                <p className="text-[10px] text-gray-400">フレンドに見せる名前です。本名ではなくニックネームがおすすめです</p>
+              </div>
+            ) : nameStatus === 'checking' ? (
               <p className="text-xs text-gray-400 text-center py-2">確認中...</p>
             ) : (
               <form onSubmit={handleSaveName} className="space-y-1.5">
@@ -341,78 +373,51 @@ export const StartApp: React.FC<StartAppProps> = ({
           </div>
         )}
 
-        {/* 参加者ID */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
-          <div className="text-center">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              STEP {idStep}: {lockedParticipantId ? '参加者IDの確認' : '参加者IDを入力'}
-            </span>
-          </div>
-          {lockedParticipantId ? (
-            // アカウントに登録済み：変更できない
-            <div className="space-y-1.5">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+        {/* 参加者ID（Google でログインした人で、まだアカウントに登録されていないときだけ） */}
+        {showPidStep && (
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
+            <div className="text-center">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">STEP {pidStep}: 参加者IDを入力</span>
+            </div>
+            <label className="block">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-1.5">
                 <IdCard size={14} /> 参加者ID
               </span>
-              <div className="flex items-center justify-between gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
-                <span className="text-sm font-mono font-bold text-gray-900 truncate">{lockedParticipantId}</span>
-                <span className="shrink-0 flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                  <Lock size={10} /> アカウントに登録済み
-                </span>
-              </div>
-              {participantError ? (
-                <p className="text-[11px] text-red-500 font-bold">{participantError}</p>
-              ) : (
-                <p className="text-[10px] text-gray-400">
-                  このアカウントの参加者IDです。どの端末でもログインすると同じIDになります。変更したいときは管理者に連絡してください。
-                </p>
-              )}
-            </div>
-          ) : (
-            <>
-              <label className="block">
-                <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-1.5">
-                  <IdCard size={14} /> 参加者ID
-                </span>
-                <input
-                  type="text"
-                  value={participantInput}
-                  disabled={participantChecking}
-                  onChange={(e) => {
-                    setParticipantInput(e.target.value);
-                    setParticipantError('');
-                  }}
-                  maxLength={PARTICIPANT_ID_MAX}
-                  autoComplete="off"
-                  placeholder={participantChecking ? '確認中...' : '例: A01'}
-                  className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 font-mono disabled:opacity-50 ${
-                    participantError ? 'border-red-400' : 'border-gray-200'
-                  }`}
-                />
-              </label>
-              {participantError ? (
-                <p className="text-[11px] text-red-500 font-bold">{participantError}</p>
-              ) : user ? (
-                <p className="text-[10px] text-gray-400">
-                  配布されたIDを入力してください。<span className="font-bold text-gray-500">ログイン中は、このIDがアカウントに登録され、あとから変更できません。</span>
-                  入力まちがいに気をつけてください。
-                </p>
-              ) : (
-                <p className="text-[10px] text-gray-400">
-                  配布されたIDを入力してください。どの端末でも同じIDを使うと、記録がまとめて集計されます。
-                </p>
-              )}
-            </>
-          )}
-        </div>
+              <input
+                type="text"
+                value={participantInput}
+                disabled={participantChecking}
+                onChange={(e) => {
+                  setParticipantInput(e.target.value);
+                  setParticipantError('');
+                }}
+                maxLength={PARTICIPANT_ID_MAX}
+                autoComplete="off"
+                placeholder={participantChecking ? '確認中...' : '例: A01'}
+                className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 font-mono disabled:opacity-50 ${
+                  participantError ? 'border-red-400' : 'border-gray-200'
+                }`}
+              />
+            </label>
+            {participantError ? (
+              <p className="text-[11px] text-red-500 font-bold">{participantError}</p>
+            ) : (
+              <p className="text-[10px] text-gray-400">
+                <span className="font-bold text-gray-500">このIDはアカウントに登録され、あとから変更できません。</span>
+                入力まちがいに気をつけてください。
+              </p>
+            )}
+          </div>
+        )}
 
         {/* モード選択エリア */}
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
           <div className="text-center">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              STEP {idStep + 1}: モードを選択して開始
+              STEP {modeStep}: モードを選択して開始
             </span>
           </div>
+          {!user && <p className="text-[11px] text-gray-400 text-center">ログインして名前を決めると選べます</p>}
 
           <div className="space-y-3">
             <button
@@ -455,6 +460,7 @@ export const StartApp: React.FC<StartAppProps> = ({
               <ArrowRight size={18} className="text-purple-300 group-hover:text-purple-600 transition" />
             </button>
           </div>
+          {modeError && <p className="text-[11px] text-red-500 font-bold text-center">{modeError}</p>}
         </div>
 
         {/* 管理者用（URL に ?admin を付けたときだけ表示） */}

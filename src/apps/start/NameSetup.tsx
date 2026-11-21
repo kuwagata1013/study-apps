@@ -82,7 +82,7 @@ export const NameSetup: React.FC<Props> = ({ uid, initialName = '', onDone, onLo
           onClick={onLogout}
           className="w-full flex items-center justify-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600"
         >
-          <LogOut size={12} /> ログアウトしてゲストで使う
+          <LogOut size={12} /> ログアウト（別の参加者IDでログインし直す）
         </button>
       </form>
     </div>

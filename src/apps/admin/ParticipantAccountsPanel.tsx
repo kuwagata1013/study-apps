@@ -4,10 +4,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Pencil, RefreshCw, Users } from 'lucide-react';
 import { adminSetParticipantId, fetchParticipantAccounts, type ParticipantAccount } from '../../lib/accounts';
 import { fetchPlayer } from '../../lib/players';
+import { fetchAdminUids } from '../../lib/admins';
 import { isValidParticipantId, normalizeParticipantId } from '../../lib/participant';
 
 interface Row extends ParticipantAccount {
   name: string;
+  isAdmin: boolean;
 }
 
 const dateText = (d: Date | null) =>
@@ -35,11 +37,12 @@ export const ParticipantAccountsPanel: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const accounts = await fetchParticipantAccounts();
+      const [accounts, adminUids] = await Promise.all([fetchParticipantAccounts(), fetchAdminUids().catch(() => [] as string[])]);
+      const admins = new Set(adminUids);
       const names = await Promise.all(accounts.map((a) => fetchPlayer(a.uid).catch(() => null)));
       setRows(
         accounts
-          .map((a, i) => ({ ...a, name: names[i]?.name ?? '' }))
+          .map((a, i) => ({ ...a, name: names[i]?.name ?? '', isAdmin: admins.has(a.uid) }))
           .sort((x, y) => x.participantId.localeCompare(y.participantId, 'ja', { numeric: true }))
       );
     } catch (e) {
@@ -82,8 +85,8 @@ export const ParticipantAccountsPanel: React.FC = () => {
   const exportCsv = () =>
     downloadCsv(
       `participant_accounts_${new Date().toISOString().slice(0, 10)}.csv`,
-      ['参加者ID', 'プレイヤー名', 'アカウントID', '登録日時', '管理者が変更した日時'],
-      rows.map((r) => [r.participantId, r.name, r.uid, dateText(r.createdAt), dateText(r.updatedAt)])
+      ['参加者ID', 'プレイヤー名', 'アカウントID', '管理者', '登録日時', '管理者が変更した日時'],
+      rows.map((r) => [r.participantId, r.name, r.uid, r.isAdmin ? '管理者' : '', dateText(r.createdAt), dateText(r.updatedAt)])
     );
 
   return (
@@ -146,7 +149,12 @@ export const ParticipantAccountsPanel: React.FC = () => {
                   <td className={`px-3 py-2 font-mono font-bold whitespace-nowrap ${duplicated.has(r.participantId) ? 'text-amber-300' : 'text-white'}`}>
                     {r.participantId}
                   </td>
-                  <td className="px-3 py-2 text-neutral-200 whitespace-nowrap">{r.name || <span className="text-neutral-500">（未設定）</span>}</td>
+                  <td className="px-3 py-2 text-neutral-200 whitespace-nowrap">
+                    {r.name || <span className="text-neutral-500">（未設定）</span>}
+                    {r.isAdmin && (
+                      <span className="ml-1.5 text-[9px] font-bold text-purple-200 bg-purple-600/40 border border-purple-400/40 px-1.5 py-0.5 rounded-full">管理者</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono text-[10px] text-neutral-500 select-all">{r.uid}</td>
                   <td className="px-3 py-2 text-neutral-400 whitespace-nowrap">
                     {dateText(r.createdAt)}
