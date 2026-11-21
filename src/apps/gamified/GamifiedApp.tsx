@@ -477,7 +477,6 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const streakDays = studyStreak(logs, protectedDays);
   const bonusPercent = Math.round(streakBonusRate(streakUntilYesterday(logs, protectedDays)) * 100);
   const focusAchieved = Math.max(bestRun, runSeconds) >= FOCUS_BONUS_SECONDS;
-  const focusLeftMin = Math.ceil((FOCUS_BONUS_SECONDS - runSeconds) / 60);
 
   return (
     <div className="game-stage relative h-[100dvh] overflow-hidden bg-slate-950 text-slate-100 antialiased selection:bg-purple-600 selection:text-white">
@@ -570,24 +569,18 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
               <p className="game-digits font-mono font-black tracking-tight text-5xl md:text-6xl text-white mt-1">
                 {formatTime(seconds)}
               </p>
-              <p className="text-[10px] text-white/85 mt-1 flex items-center justify-center gap-1">
-                <Zap size={10} className="text-[#fdd69f]" />
-                <span>1分 = +{EXP_PER_MINUTE} EXP ＋ クエスト達成で +50 EXP</span>
-              </p>
               {bonusPercent > 0 && (
-                <p className="text-[10px] font-bold text-[#fdd69f] mt-0.5 flex items-center justify-center gap-1">
+                <p className="text-[10px] font-bold text-[#fdd69f] mt-1 flex items-center justify-center gap-1">
                   <Flame size={10} className="text-[#fdd69f]" />
-                  <span>連続ボーナス 学習時間の EXP +{bonusPercent}%</span>
+                  <span>連続ボーナス +{bonusPercent}%</span>
                 </p>
               )}
-              <p className="text-[10px] text-white/85 mt-0.5 flex items-center justify-center gap-1">
-                <Sparkles size={10} className="text-[#fdd69f]" />
-                {focusAchieved
-                  ? <span className="text-[#fdd69f] font-bold">集中ボーナス達成！ 記録すると宝箱が開きます</span>
-                  : isActive
-                    ? <span>止めずにあと {focusLeftMin} 分で集中ボーナスの宝箱</span>
-                    : <span>止めずに{FOCUS_BONUS_SECONDS / 60}分続けると集中ボーナスの宝箱</span>}
-              </p>
+              {focusAchieved && (
+                <p className="text-[10px] font-bold text-[#fdd69f] mt-0.5 flex items-center justify-center gap-1">
+                  <Sparkles size={10} className="text-[#fdd69f]" />
+                  <span>集中ボーナス達成！ 記録すると宝箱が開きます</span>
+                </p>
+              )}
               {/* 教科選択 */}
               <div className="flex justify-center flex-wrap gap-1.5 mt-2.5">
                 {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
