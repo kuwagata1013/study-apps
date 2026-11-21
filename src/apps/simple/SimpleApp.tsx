@@ -3,7 +3,6 @@ import {
   Clock, 
   CheckSquare, 
   BarChart2, 
-  User, 
   Play, 
   Pause, 
   RotateCcw, 
@@ -18,20 +17,16 @@ import {
   Timer,
   Settings,
   Music,
-  Upload,
-  Save,
   Lock,
   LogOut,
   RefreshCw
 } from 'lucide-react';
 import { auth } from '../../firebase';
-import { getLocalAvatar, setLocalAvatar, resizeImageFile, isDataUrl } from '../../lib/avatar';
 import { saveResearchLog } from '../../lib/researchLog';
 import { trackEvent } from '../../lib/researchEvents';
 import { useScreenTracking } from '../../lib/useResearchTracking';
 import { useBgm } from '../../lib/useBgm';
-import { getParticipantId } from '../../lib/participant';
-import { updateProfile, signOut } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 
 // 以前の版で最初から入っていた見本タスク（保存データからも取り除く）
 const SAMPLE_TASK_TITLES = ['英語 単語帳 p.20-40', '数学 ワーク2ページ'];
@@ -102,21 +97,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     new Date().toISOString().split('T')[0]
   );
 
-  // 6. マイページ内 アカウント設定編集ステート
-  const [displayName, setDisplayName] = useState(user?.displayName || '');
-  const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
-  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-  const [profileMessage, setProfileMessage] = useState('');
-
   // 7. 管理者認証モーダルステート
-
-  // ユーザー情報の同期
-  useEffect(() => {
-    if (user) {
-      setDisplayName(user.displayName || '');
-      setPhotoURL(getLocalAvatar(user.uid) || user.photoURL || '');
-    }
-  }, [user]);
 
   // モード切替時（タイマー計測中でない場合のみ初期化）
   const handleSwitchTimerMode = (newMode: 'countup' | 'countdown') => {
@@ -211,57 +192,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       }
     }
   }, []);
-
-  // プロフィール更新
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!auth.currentUser) return;
-
-    setIsUpdatingProfile(true);
-    setProfileMessage('');
-
-    try {
-      // 端末内の画像は localStorage に保存し、Auth には URL の場合のみ保存する
-      if (isDataUrl(photoURL)) {
-        setLocalAvatar(auth.currentUser.uid, photoURL);
-        await updateProfile(auth.currentUser, { displayName: displayName });
-      } else {
-        setLocalAvatar(auth.currentUser.uid, null);
-        await updateProfile(auth.currentUser, {
-          displayName: displayName,
-          photoURL: photoURL || null
-        });
-      }
-      setProfileMessage('プロフィールを保存しました！');
-      setTimeout(() => setProfileMessage(''), 3000);
-    } catch (error) {
-      console.error('プロフィール更新エラー:', error);
-      setProfileMessage('更新に失敗しました。');
-    } finally {
-      setIsUpdatingProfile(false);
-    }
-  };
-
-  // 画像ファイルアップロード（縮小してこの端末に保存）
-  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      alert('画像ファイルを選択してください');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      alert('画像サイズは10MB以下にしてください');
-      return;
-    }
-    try {
-      setPhotoURL(await resizeImageFile(file));
-    } catch (error) {
-      console.error('画像の読み込みエラー:', error);
-      alert('画像を読み込めませんでした');
-    }
-  };
 
   // ログアウト処理
   const handleLogout = async () => {
@@ -846,84 +776,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
         {activeTab === 'profile' && (
           <div className="space-y-4">
             
-            {/* プロフィール設定フォーム */}
-            <form onSubmit={handleUpdateProfile} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
-              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
-                <User size={18} /> アカウント・プロフィール設定
-              </h2>
-
-              <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-2xl border border-gray-100">
-                <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-200 border border-gray-300 flex items-center justify-center shrink-0">
-                  {photoURL ? (
-                    <img src={photoURL} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <User size={28} className="text-gray-400" />
-                  )}
-                </div>
-                <div className="text-xs text-gray-500 overflow-hidden">
-                  <p className="font-bold text-gray-900 text-sm truncate">{displayName || '未設定'}</p>
-                  <p className="truncate text-gray-400">{user?.email || 'ゲストアカウント'}</p>
-                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">参加者ID: {getParticipantId() || '未入力'}</p>
-                </div>
-              </div>
-
-              {user && (
-                <>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">名前</label>
-                    <input
-                      type="text"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-                      placeholder="表示名を入力"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">アイコン画像</label>
-                    <div className="space-y-2">
-                      <input
-                        type="url"
-                        value={isDataUrl(photoURL) ? '' : photoURL}
-                        onChange={(e) => setPhotoURL(e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-                        placeholder={isDataUrl(photoURL) ? '端末の画像を使用中（URLを入力すると置き換え）' : '画像URLを入力 (https://...)'}
-                      />
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageFileUpload}
-                          className="hidden"
-                          id="profile-icon-file-input"
-                        />
-                        <label
-                          htmlFor="profile-icon-file-input"
-                          className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition border border-gray-200"
-                        >
-                          <Upload size={14} /> 画像ファイルを選択
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  {profileMessage && (
-                    <p className="text-xs font-semibold text-green-600 text-center">{profileMessage}</p>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={isUpdatingProfile}
-                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm"
-                  >
-                    <Save size={16} />
-                    {isUpdatingProfile ? '更新中...' : 'プロフィールを保存'}
-                  </button>
-                </>
-              )}
-            </form>
-
             {/* BGM環境音設定 */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
               <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
@@ -1039,8 +891,8 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
             onClick={() => setActiveTab('profile')}
             className={`flex flex-col items-center gap-1 transition ${activeTab === 'profile' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
           >
-            <User size={20} />
-            <span className="text-[10px]">マイページ</span>
+            <Settings size={20} />
+            <span className="text-[10px]">設定</span>
           </button>
         </div>
       </nav>
