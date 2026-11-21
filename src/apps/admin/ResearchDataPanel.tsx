@@ -171,6 +171,10 @@ interface BehaviorRow {
   label: string;
   hasParticipantId: boolean;
   launches: number;
+  launchDays: number; // 起動した日数
+  spanDays: number; // 最初の起動日〜最後の起動日（両端を含む日数）
+  launchesPerDay: number;
+  topBgm: string; // いちばん長く再生したBGM
   resumes: number;
   bgmPlays: number;
   bgmSeconds: number;
@@ -186,8 +190,36 @@ interface BehaviorRow {
   studyCount: number;
 }
 
+// BGM の名前（モードごとに曲が違う。'rain' は両方にあるので、モードと組みで見分ける）
+const BGM_NAMES: Record<string, Record<string, string>> = {
+  gamified: { cyber: 'サイバー', lofi: 'Lo-Fi', rain: 'ディープ雨' },
+  simple: { rain: '雨の音', waves: '波の音', cafe: 'カフェ' }
+};
+const bgmLabel = (mode: string, id: string) => BGM_NAMES[mode]?.[id] ?? (id || '(不明)');
+
+interface BgmRow {
+  key: string;
+  mode: string;
+  track: string;
+  name: string;
+  selects: number;
+  plays: number;
+  seconds: number;
+  participants: number;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+// 2つの日付のあいだの日数（両端を含む。時刻は無視）
+const daysBetween = (a: Date, b: Date) =>
+  Math.round(
+    (new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime() -
+      new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime()) /
+      DAY_MS
+  ) + 1;
+
 const tapsPerMinute = (taps: number, seconds: number) => (seconds > 0 ? (taps / seconds) * 60 : 0);
 const round1 = (v: number) => Math.round(v * 10) / 10;
+const round2 = (v: number) => Math.round(v * 100) / 100;
 
 const statsOf = (logs: LogRecord[]): Stats => ({
   participants: new Set(logs.map((l) => l.participantKey)).size,
@@ -321,7 +353,7 @@ export const ResearchDataPanel: React.FC = () => {
       if (!row) {
         row = {
           key: r.participantKey, label: r.participantLabel, hasParticipantId: r.hasParticipantId,
-          launches: 0, resumes: 0, bgmPlays: 0, bgmSeconds: 0, taps: 0, tapSeconds: 0,
+          launches: 0, launchDays: 0, spanDays: 0, launchesPerDay: 0, topBgm: '', resumes: 0, bgmPlays: 0, bgmSeconds: 0, taps: 0, tapSeconds: 0,
           questAdds: 0, questCompletes: 0, questDeletes: 0,
           timerStarts: 0, timerPauses: 0, timerResets: 0, studySeconds: 0, studyCount: 0
         };
@@ -329,8 +361,28 @@ export const ResearchDataPanel: React.FC = () => {
       }
       return row;
     };
+    // 起動した日・最初と最後の起動・BGMごとの再生時間（参加者ごと）
+    const launchDays = new Map<string, Set<string>>();
+    const launchRange = new Map<string, { first: Date; last: Date }>();
+    const bgmSeconds = new Map<string, Map<string, number>>();
     filteredEvents.forEach((e) => {
       const row = rowOf(e);
+      if (e.type === 'app_launch' && e.at) {
+        if (!launchDays.has(e.participantKey)) launchDays.set(e.participantKey, new Set());
+        launchDays.get(e.participantKey)!.add(dateKey(e.at));
+        const r = launchRange.get(e.participantKey);
+        if (!r) launchRange.set(e.participantKey, { first: e.at, last: e.at });
+        else {
+          if (e.at < r.first) r.first = e.at;
+          if (e.at > r.last) r.last = e.at;
+        }
+      }
+      if (e.type === 'bgm_stop' && e.label) {
+        if (!bgmSeconds.has(e.participantKey)) bgmSeconds.set(e.participantKey, new Map());
+        const m = bgmSeconds.get(e.participantKey)!;
+        const name = bgmLabel(e.mode, e.label);
+        m.set(name, (m.get(name) ?? 0) + (e.seconds ?? 0));
+      }
       switch (e.type) {
         case 'app_launch': row.launches++; break;
         case 'app_resume': row.resumes++; break;
@@ -351,8 +403,46 @@ export const ResearchDataPanel: React.FC = () => {
       row.studySeconds += l.durationSeconds;
       row.studyCount++;
     });
+    rows.forEach((row) => {
+      row.launchDays = launchDays.get(row.key)?.size ?? 0;
+      const r = launchRange.get(row.key);
+      row.spanDays = r ? daysBetween(r.first, r.last) : 0;
+      row.launchesPerDay = row.spanDays > 0 ? row.launches / row.spanDays : 0;
+      const top = [...(bgmSeconds.get(row.key) ?? new Map<string, number>())].sort((a, b) => b[1] - a[1])[0];
+      row.topBgm = top && top[1] > 0 ? top[0] : '';
+    });
     return [...rows.values()].sort((a, b) => a.label.localeCompare(b.label, 'ja'));
   }, [filteredEvents, filtered]);
+
+  // 参加者の平均（起動/日）。起動の記録がある参加者だけで平均する
+  const avgLaunchesPerDay = useMemo(() => {
+    const list = behaviorRows.filter((r) => r.spanDays > 0);
+    return list.length ? list.reduce((t, r) => t + r.launchesPerDay, 0) / list.length : 0;
+  }, [behaviorRows]);
+
+  // BGM ごとの利用状況
+  const bgmRows = useMemo<BgmRow[]>(() => {
+    const rows = new Map<string, BgmRow & { people: Set<string> }>();
+    filteredEvents.forEach((e) => {
+      if (!['bgm_select', 'bgm_play', 'bgm_stop'].includes(e.type) || !e.label) return;
+      const key = `${e.mode}:${e.label}`;
+      let row = rows.get(key);
+      if (!row) {
+        row = { key, mode: e.mode, track: e.label, name: bgmLabel(e.mode, e.label), selects: 0, plays: 0, seconds: 0, participants: 0, people: new Set() };
+        rows.set(key, row);
+      }
+      if (e.type === 'bgm_select') row.selects++;
+      if (e.type === 'bgm_play') {
+        row.plays++;
+        row.people.add(e.participantKey);
+      }
+      if (e.type === 'bgm_stop') row.seconds += e.seconds ?? 0;
+    });
+    return [...rows.values()]
+      .map(({ people, ...r }) => ({ ...r, participants: people.size }))
+      .sort((a, b) => b.seconds - a.seconds || b.plays - a.plays);
+  }, [filteredEvents]);
+  const bgmTotalSeconds = bgmRows.reduce((t, r) => t + r.seconds, 0);
 
   const behaviorTotal = useMemo(
     () =>
@@ -516,15 +606,24 @@ export const ResearchDataPanel: React.FC = () => {
   const behaviorTable = (): Sheet => ({
     name: '行動集計',
     headers: [
-      '参加者', '参加者ID入力', '起動回数', '再開回数', 'BGM再生回数', 'BGM再生時間(分)',
+      '参加者', '参加者ID入力', '起動回数', '起動した日数', '期間(日)', '起動/日', '再開回数', 'BGM再生回数', 'BGM再生時間(分)', 'よく使ったBGM',
       'タップ数', '表示時間(分)', 'タップ/分', 'クエスト追加', 'クエスト達成', 'クエスト削除',
       'タイマー開始', 'タイマー一時停止', 'タイマーリセット', '学習記録数', '合計学習時間(分)'
     ],
     rows: behaviorRows.map((r) => [
-      r.label, r.hasParticipantId ? 'あり' : 'なし', r.launches, r.resumes, r.bgmPlays,
-      round1(r.bgmSeconds / 60), r.taps, round1(r.tapSeconds / 60), round1(tapsPerMinute(r.taps, r.tapSeconds)),
+      r.label, r.hasParticipantId ? 'あり' : 'なし', r.launches, r.launchDays, r.spanDays, round2(r.launchesPerDay), r.resumes, r.bgmPlays,
+      round1(r.bgmSeconds / 60), r.topBgm, r.taps, round1(r.tapSeconds / 60), round1(tapsPerMinute(r.taps, r.tapSeconds)),
       r.questAdds, r.questCompletes, r.questDeletes, r.timerStarts, r.timerPauses, r.timerResets,
       r.studyCount, round1(r.studySeconds / 60)
+    ])
+  });
+
+  const bgmTable = (): Sheet => ({
+    name: 'BGM別',
+    headers: ['モード', '曲ID', '曲名', '選択回数', '再生回数', '再生時間(分)', '再生時間の割合(%)', '再生した人数'],
+    rows: bgmRows.map((r) => [
+      modeLabel(r.mode), r.track, r.name, r.selects, r.plays, round1(r.seconds / 60),
+      bgmTotalSeconds > 0 ? round1((r.seconds / bgmTotalSeconds) * 100) : 0, r.participants
     ])
   });
 
@@ -550,6 +649,7 @@ export const ResearchDataPanel: React.FC = () => {
   const exportLogsCsv = () => exportCsv(`research_logs_${filePrefix}_${today}.csv`, logsTable());
   const exportParticipantsCsv = () => exportCsv(`participant_summary_${filePrefix}_${today}.csv`, participantsTable());
   const exportBehaviorCsv = () => exportCsv(`behavior_summary_${filePrefix}_${today}.csv`, behaviorTable());
+  const exportBgmCsv = () => exportCsv(`bgm_summary_${filePrefix}_${today}.csv`, bgmTable());
   const exportEventsCsv = () => exportCsv(`research_events_${filePrefix}_${today}.csv`, eventsTable());
 
   // 4つの表をシートに分けて、1つの Excel ファイルにまとめる
@@ -571,7 +671,7 @@ export const ResearchDataPanel: React.FC = () => {
         ['行動記録', `${filteredEvents.length} 件`]
       ]
     };
-    downloadXlsx(`research_${filePrefix}_${today}.xlsx`, [about, participantsTable(), behaviorTable(), logsTable(), eventsTable()]);
+    downloadXlsx(`research_${filePrefix}_${today}.xlsx`, [about, participantsTable(), behaviorTable(), bgmTable(), logsTable(), eventsTable()]);
   };
 
   const eventDetail = (e: EventRecord) => {
@@ -935,7 +1035,12 @@ export const ResearchDataPanel: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon={<Power size={12} />} label="起動回数" value={`${behaviorTotal.launches} 回`} />
+        <StatCard
+          icon={<Power size={12} />}
+          label="起動頻度"
+          value={`${round1(avgLaunchesPerDay)} 回/日`}
+          sub={`参加者平均・起動 合計 ${behaviorTotal.launches} 回`}
+        />
         <StatCard
           icon={<Music size={12} />}
           label="BGM再生"
@@ -956,12 +1061,74 @@ export const ResearchDataPanel: React.FC = () => {
         />
       </div>
 
+      {/* BGM の利用状況 */}
+      <div className="bg-black rounded-3xl p-5 border border-neutral-800 space-y-3">
+        <div className="flex flex-wrap gap-2 justify-between items-center">
+          <div>
+            <h3 className="text-xs font-bold text-white">BGMの利用状況</h3>
+            <p className="text-[10px] text-neutral-500">再生時間の長い順。割合 = その曲の再生時間 ÷ すべての曲の再生時間</p>
+          </div>
+          <button
+            onClick={exportBgmCsv}
+            className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5"
+          >
+            <Download size={14} /> BGM集計CSV
+          </button>
+        </div>
+        <div className="overflow-x-auto border border-neutral-800 rounded-2xl">
+          <table className="w-full text-left text-[11px] text-neutral-300">
+            <thead className="bg-neutral-900 text-neutral-400 text-[10px] font-bold border-b border-neutral-800">
+              <tr>
+                <th className={th}>モード</th>
+                <th className={th}>曲</th>
+                <th className={th}>選択</th>
+                <th className={th}>再生</th>
+                <th className={th}>再生時間</th>
+                <th className={`${th} w-1/3`}>割合</th>
+                <th className={th}>再生した人数</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-800">
+              {bgmRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center text-neutral-500">
+                    {isLoading ? '読み込み中...' : 'BGMの記録がありません'}
+                  </td>
+                </tr>
+              ) : (
+                bgmRows.map((r) => {
+                  const pct = bgmTotalSeconds > 0 ? (r.seconds / bgmTotalSeconds) * 100 : 0;
+                  return (
+                    <tr key={r.key}>
+                      <td className={td}>{modeLabel(r.mode)}</td>
+                      <td className={`${td} font-bold text-white`}>{r.name}</td>
+                      <td className={td}>{r.selects} 回</td>
+                      <td className={td}>{r.plays} 回</td>
+                      <td className={`${td} font-mono`}>{durationText(r.seconds)}</td>
+                      <td className={td}>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-neutral-800 rounded-full overflow-hidden min-w-16">
+                            <div className="h-full bg-sky-500 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="font-mono w-12 text-right">{round1(pct)}%</span>
+                        </div>
+                      </td>
+                      <td className={td}>{r.participants} 人</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* 参加者別の行動 */}
       <div className="bg-black rounded-3xl p-5 border border-neutral-800 space-y-3">
         <div className="flex flex-wrap gap-2 justify-between items-center">
           <div>
             <h3 className="text-xs font-bold text-white">参加者別の行動</h3>
-            <p className="text-[10px] text-neutral-500">タップ/分 = タップ数 ÷ アプリを表示していた時間。行を押すとその参加者に絞り込みます</p>
+            <p className="text-[10px] text-neutral-500">起動/日 = 起動回数 ÷ 最初に起動した日から最後に起動した日までの日数。タップ/分 = タップ数 ÷ アプリを表示していた時間。行を押すとその参加者に絞り込みます</p>
           </div>
           <button
             onClick={exportBehaviorCsv}
@@ -976,7 +1143,9 @@ export const ResearchDataPanel: React.FC = () => {
               <tr>
                 <th className={th}>参加者</th>
                 <th className={th}>起動</th>
+                <th className={th}>起動/日</th>
                 <th className={th}>BGM再生</th>
+                <th className={th}>よく使ったBGM</th>
                 <th className={th}>タップ</th>
                 <th className={th}>タップ/分</th>
                 <th className={th}>クエスト 追加/達成/削除</th>
@@ -987,7 +1156,7 @@ export const ResearchDataPanel: React.FC = () => {
             <tbody className="divide-y divide-neutral-800">
               {behaviorRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-neutral-500">
+                  <td colSpan={10} className="p-6 text-center text-neutral-500">
                     {isLoading ? '読み込み中...' : '該当するデータがありません'}
                   </td>
                 </tr>
@@ -1000,7 +1169,12 @@ export const ResearchDataPanel: React.FC = () => {
                   >
                     <td className={`${td} font-mono font-bold ${r.hasParticipantId ? 'text-white' : 'text-amber-300'}`}>{r.label}</td>
                     <td className={td}>{r.launches} 回{r.resumes > 0 && <span className="text-neutral-500">（再開 {r.resumes}）</span>}</td>
+                    <td className={td}>
+                      <span className="font-mono font-bold text-white">{round2(r.launchesPerDay)}</span>
+                      {r.spanDays > 0 && <span className="text-neutral-500">（{r.launchDays}日起動 / {r.spanDays}日間）</span>}
+                    </td>
                     <td className={td}>{r.bgmPlays} 回 / {durationText(r.bgmSeconds)}</td>
+                    <td className={td}>{r.topBgm || <span className="text-neutral-600">-</span>}</td>
                     <td className={td}>{r.taps} 回</td>
                     <td className={`${td} font-mono`}>{round1(tapsPerMinute(r.taps, r.tapSeconds))}</td>
                     <td className={td}>{r.questAdds} / {r.questCompletes} / {r.questDeletes}</td>
