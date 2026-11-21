@@ -4,6 +4,7 @@
 import { collection, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getParticipantId } from './participant';
+import { getLocalDataset } from './dataset';
 
 export type StudyMode = 'simple' | 'gamified';
 
@@ -44,6 +45,7 @@ export const saveResearchLog = async (input: ResearchLogInput) => {
     participantId: getParticipantId(),
     deviceId: getDeviceId(),
     mode: input.mode,
+    dataset: getLocalDataset(),
     subject: input.subject.slice(0, 100),
     durationSeconds,
     durationMinutes: Math.round(durationSeconds / 60),

@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Activity, Database, Download, Flag, ListChecks, MousePointerClick, Music, Power, RefreshCw, Timer, Users, Clock, X
+  Activity, Database, Download, Flag, FolderPlus, ListChecks, MousePointerClick, Music, Power, RefreshCw, Timer, Users, Clock, X
 } from 'lucide-react';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { fetchCurrentDataset, startNextDataset } from '../../lib/dataset';
 
 // ===== 型と変換 =====
 
@@ -11,6 +12,7 @@ type ModeFilter = 'all' | 'simple' | 'gamified';
 
 interface LogRecord {
   id: string;
+  dataset: number;
   participantKey: string;
   participantLabel: string;
   hasParticipantId: boolean;
@@ -83,11 +85,15 @@ const participantOf = (d: any) => {
   };
 };
 
+// データ番号のない記録（この機能より前のもの）はデータ1として扱う
+const datasetOf = (d: any) => (Number.isInteger(d.dataset) && d.dataset >= 1 ? d.dataset : 1);
+
 const toRecord = (id: string, d: any): LogRecord => {
   const durationSeconds =
     typeof d.durationSeconds === 'number' ? d.durationSeconds : (d.durationMinutes ?? 0) * 60;
   return {
     id,
+    dataset: datasetOf(d),
     ...participantOf(d),
     mode: d.mode || '',
     subject: d.subject || '',
@@ -106,6 +112,7 @@ const toRecord = (id: string, d: any): LogRecord => {
 
 interface EventRecord {
   id: string;
+  dataset: number;
   participantKey: string;
   participantLabel: string;
   hasParticipantId: boolean;
@@ -142,6 +149,7 @@ const eventLabel = (type: string) => EVENT_LABELS[type] ?? type;
 
 const toEventRecord = (id: string, d: any): EventRecord => ({
   id,
+  dataset: datasetOf(d),
   ...participantOf(d),
   sessionId: d.sessionId || '',
   mode: d.mode || '',
@@ -224,6 +232,10 @@ export const ResearchDataPanel: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [eventError, setEventError] = useState('');
+  // 記録期間：現在のデータ番号と、表示するデータ（'all' または番号）
+  const [currentDataset, setCurrentDataset] = useState<number | null>(null);
+  const [datasetFilter, setDatasetFilter] = useState<string>('');
+  const [isStartingNext, setIsStartingNext] = useState(false);
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
 
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
@@ -235,10 +247,17 @@ export const ResearchDataPanel: React.FC = () => {
     setIsLoading(true);
     setError('');
     setEventError('');
-    const [logResult, eventResult] = await Promise.allSettled([
+    const [logResult, eventResult, datasetResult] = await Promise.allSettled([
       getDocs(query(collection(db, 'researchLogs'), orderBy('createdAt', 'desc'))),
-      getDocs(query(collection(db, 'researchEvents'), orderBy('createdAt', 'desc')))
+      getDocs(query(collection(db, 'researchEvents'), orderBy('createdAt', 'desc'))),
+      fetchCurrentDataset()
     ]);
+    if (datasetResult.status === 'fulfilled') {
+      const current = datasetResult.value;
+      setCurrentDataset(current);
+      // 最初は現在のデータを表示する
+      setDatasetFilter((prev) => prev || String(current));
+    }
     if (logResult.status === 'fulfilled') {
       setLogs(logResult.value.docs.map((doc) => toRecord(doc.id, doc.data())));
     } else {
@@ -269,7 +288,8 @@ export const ResearchDataPanel: React.FC = () => {
 
   // 絞り込み条件（記録・行動データ共通）
   const matches = useMemo(
-    () => (r: { mode: string; participantKey: string }, at: Date | null) => {
+    () => (r: { mode: string; participantKey: string; dataset: number }, at: Date | null) => {
+      if (datasetFilter && datasetFilter !== 'all' && String(r.dataset) !== datasetFilter) return false;
       if (modeFilter !== 'all' && r.mode !== modeFilter) return false;
       if (participantFilter !== 'all' && r.participantKey !== participantFilter) return false;
       const day = at ? dateKey(at) : '';
@@ -277,7 +297,7 @@ export const ResearchDataPanel: React.FC = () => {
       if (dateTo && (!day || day > dateTo)) return false;
       return true;
     },
-    [modeFilter, participantFilter, dateFrom, dateTo]
+    [datasetFilter, modeFilter, participantFilter, dateFrom, dateTo]
   );
 
   const filtered = useMemo(() => logs.filter((l) => matches(l, l.endedAt)), [logs, matches]);
@@ -376,6 +396,49 @@ export const ResearchDataPanel: React.FC = () => {
       .sort((a, b) => b.totalSeconds - a.totalSeconds);
   }, [filtered]);
 
+  // 選べるデータ番号（1 〜 現在の番号、記録にある最大の番号）
+  const datasetOptions = useMemo(() => {
+    const max = Math.max(currentDataset ?? 1, ...logs.map((l) => l.dataset), ...events.map((e) => e.dataset));
+    return Array.from({ length: max }, (_, i) => i + 1);
+  }, [currentDataset, logs, events]);
+
+  const datasetText = datasetFilter === 'all' || !datasetFilter ? '全データ' : `データ${datasetFilter}`;
+  const filePrefix = datasetFilter === 'all' || !datasetFilter ? 'all' : `data${datasetFilter}`;
+
+  const handleStartNext = async () => {
+    if (currentDataset === null) {
+      alert('現在のデータ番号を読み込めていません。「最新の状態に更新」を押してからもう一度お試しください。');
+      return;
+    }
+    const next = currentDataset + 1;
+    const ok = confirm(
+      `データ${next} の記録を開始しますか？
+
+` +
+        `・これ以降の学習ログと行動データは「データ${next}」として保存されます
+` +
+        `・データ${currentDataset} までの記録は消えず、この画面で切り替えて見られます
+` +
+        `・参加者が次にアプリを開くと、端末のレベル・EXP・クエスト・学習履歴が初期化されます（参加者IDは残ります）
+
+` +
+        `この操作は元に戻せません。`
+    );
+    if (!ok) return;
+    setIsStartingNext(true);
+    try {
+      await startNextDataset(next);
+      setCurrentDataset(next);
+      setDatasetFilter(String(next));
+      alert(`データ${next} を開始しました。`);
+    } catch (e) {
+      console.error('データ切り替えエラー:', e);
+      alert('切り替えに失敗しました。管理者アカウントでログインしているか確認してください。');
+    } finally {
+      setIsStartingNext(false);
+    }
+  };
+
   const isFiltered = modeFilter !== 'all' || participantFilter !== 'all' || !!dateFrom || !!dateTo;
   const clearFilters = () => {
     setModeFilter('all');
@@ -392,13 +455,13 @@ export const ResearchDataPanel: React.FC = () => {
       return;
     }
     downloadCsv(
-      `research_logs_${today}.csv`,
+      `research_logs_${filePrefix}_${today}.csv`,
       [
-        'ログID', '参加者ID', 'UID', '端末ID', 'モード', '教科', '学習時間(秒)', '学習時間(分)',
+        'データ', 'ログID', '参加者ID', 'UID', '端末ID', 'モード', '教科', '学習時間(秒)', '学習時間(分)',
         '開始日時', '終了日時', 'タイマー種別', 'レベル', '獲得EXP', 'メモ', 'ユーザーエージェント'
       ],
       filtered.map((l) => [
-        l.id, l.participantId, l.uid, l.deviceId, l.mode, l.subject, l.durationSeconds,
+        l.dataset, l.id, l.participantId, l.uid, l.deviceId, l.mode, l.subject, l.durationSeconds,
         Math.round((l.durationSeconds / 60) * 10) / 10, dateTimeText(l.startedAt), dateTimeText(l.endedAt),
         l.timerType, l.level ?? '', l.expGained ?? '', l.memo, l.userAgent
       ])
@@ -411,7 +474,7 @@ export const ResearchDataPanel: React.FC = () => {
       return;
     }
     downloadCsv(
-      `participant_summary_${today}.csv`,
+      `participant_summary_${filePrefix}_${today}.csv`,
       ['参加者', '参加者ID入力', 'モード', '記録数', '学習日数', '合計学習時間(分)', '1回平均(分)', '最初の記録', '最後の記録'],
       participantRows.map((r) => [
         r.label,
@@ -433,7 +496,7 @@ export const ResearchDataPanel: React.FC = () => {
       return;
     }
     downloadCsv(
-      `behavior_summary_${today}.csv`,
+      `behavior_summary_${filePrefix}_${today}.csv`,
       [
         '参加者', '参加者ID入力', '起動回数', '再開回数', 'BGM再生回数', 'BGM再生時間(分)',
         'タップ数', '表示時間(分)', 'タップ/分', 'クエスト追加', 'クエスト達成', 'クエスト削除',
@@ -454,13 +517,13 @@ export const ResearchDataPanel: React.FC = () => {
       return;
     }
     downloadCsv(
-      `research_events_${today}.csv`,
+      `research_events_${filePrefix}_${today}.csv`,
       [
-        'イベントID', '日時', '参加者ID', 'UID', '端末ID', '起動ID', 'モード', '画面',
+        'データ', 'イベントID', '日時', '参加者ID', 'UID', '端末ID', '起動ID', 'モード', '画面',
         '種類', '種類（日本語）', '内容', '秒数', '回数'
       ],
       filteredEvents.map((e) => [
-        e.id, dateTimeText(e.at), e.participantId, e.uid, e.deviceId, e.sessionId, e.mode, e.screen,
+        e.dataset, e.id, dateTimeText(e.at), e.participantId, e.uid, e.deviceId, e.sessionId, e.mode, e.screen,
         e.type, eventLabel(e.type), e.label, e.seconds ?? '', e.count ?? ''
       ])
     );
@@ -503,6 +566,61 @@ export const ResearchDataPanel: React.FC = () => {
       </div>
 
       {error && <p className="text-xs text-red-400 font-bold">{error}</p>}
+
+      {/* 記録期間（データ1・データ2 …） */}
+      <div className="bg-slate-950 rounded-3xl p-5 border border-purple-900/60 space-y-3">
+        <div className="flex flex-wrap gap-3 justify-between items-start">
+          <div>
+            <h3 className="text-xs font-bold text-white flex items-center gap-2">
+              <FolderPlus size={16} className="text-purple-400" /> 記録期間
+            </h3>
+            <p className="text-[11px] text-slate-300 mt-1">
+              いま記録中：
+              <span className="font-black text-purple-300 text-sm ml-1">
+                {currentDataset === null ? '確認中…' : `データ${currentDataset}`}
+              </span>
+            </p>
+            <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+              次のデータを開始すると、以降の記録は新しい番号で保存され、参加者の端末の進み具合（レベル・EXP・クエスト・学習履歴）は次に開いたときに初期化されます。前のデータは消えません。
+            </p>
+          </div>
+          <button
+            onClick={handleStartNext}
+            disabled={isStartingNext || currentDataset === null}
+            className="px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl transition text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <FolderPlus size={14} />
+            {isStartingNext ? '切り替え中...' : currentDataset === null ? '次のデータを開始' : `データ${currentDataset + 1} を開始`}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {datasetOptions.map((n) => (
+            <button
+              key={n}
+              onClick={() => setDatasetFilter(String(n))}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                datasetFilter === String(n)
+                  ? 'bg-purple-600 text-white border-purple-400'
+                  : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+              }`}
+            >
+              データ{n}
+              {n === currentDataset && <span className="ml-1 text-[9px] opacity-80">記録中</span>}
+            </button>
+          ))}
+          <button
+            onClick={() => setDatasetFilter('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+              datasetFilter === 'all'
+                ? 'bg-purple-600 text-white border-purple-400'
+                : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+            }`}
+          >
+            すべて
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-500">下の集計・一覧・CSV はすべて「{datasetText}」の内容です</p>
+      </div>
 
       {/* 絞り込み */}
       <div className="bg-slate-950 rounded-3xl p-5 border border-slate-800 space-y-3">

@@ -26,7 +26,7 @@ service cloud.firestore {
       return d.keys().hasOnly([
           'uid', 'participantId', 'deviceId', 'mode', 'subject',
           'durationSeconds', 'durationMinutes', 'startedAt', 'memo',
-          'timerType', 'level', 'expGained', 'userAgent', 'createdAt'
+          'timerType', 'level', 'expGained', 'userAgent', 'dataset', 'createdAt'
         ])
         && d.keys().hasAll([
           'uid', 'participantId', 'deviceId', 'mode', 'subject',
@@ -46,6 +46,7 @@ service cloud.firestore {
         && (!('level' in d) || (d.level is int && d.level >= 1 && d.level <= 100000))
         && (!('expGained' in d) || (d.expGained is int && d.expGained >= 0 && d.expGained <= 1000000))
         && (!('userAgent' in d) || (d.userAgent is string && d.userAgent.size() <= 512))
+        && (!('dataset' in d) || (d.dataset is int && d.dataset >= 1 && d.dataset <= 1000))
         && d.createdAt == request.time;
     }
 
@@ -59,7 +60,7 @@ service cloud.firestore {
     function isValidEvent(d) {
       return d.keys().hasOnly([
           'uid', 'participantId', 'deviceId', 'sessionId', 'mode', 'screen', 'type',
-          'label', 'seconds', 'count', 'clientAt', 'createdAt'
+          'label', 'seconds', 'count', 'dataset', 'clientAt', 'createdAt'
         ])
         && d.keys().hasAll([
           'uid', 'participantId', 'deviceId', 'sessionId', 'mode', 'type', 'clientAt', 'createdAt'
@@ -78,8 +79,21 @@ service cloud.firestore {
         && (!('label' in d) || (d.label is string && d.label.size() <= 100))
         && (!('seconds' in d) || (d.seconds is int && d.seconds >= 0 && d.seconds <= 864000))
         && (!('count' in d) || (d.count is int && d.count >= 0 && d.count <= 1000000))
+        && (!('dataset' in d) || (d.dataset is int && d.dataset >= 1 && d.dataset <= 1000))
         && d.clientAt is timestamp
         && d.createdAt == request.time;
+    }
+
+    // 記録期間（データ1・データ2 …）の番号。誰でも読める（起動時に確認するため）。変更は管理者のみ
+    match /settings/dataset {
+      allow get: if true;
+      allow list, delete: if false;
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['current', 'updatedAt'])
+        && request.resource.data.current is int
+        && request.resource.data.current >= 1
+        && request.resource.data.current <= 1000
+        && request.resource.data.updatedAt == request.time;
     }
 
     // それ以外はすべて拒否

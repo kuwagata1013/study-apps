@@ -6,6 +6,7 @@ import { collection, addDoc, serverTimestamp, Timestamp } from 'firebase/firesto
 import { db } from '../firebase';
 import { getParticipantId } from './participant';
 import { getDeviceId } from './researchLog';
+import { getLocalDataset } from './dataset';
 
 export type EventMode = 'start' | 'simple' | 'gamified' | 'admin';
 
@@ -54,6 +55,7 @@ const send = (type: ResearchEventType, input: ResearchEventInput = {}) => {
     deviceId: getDeviceId(),
     sessionId,
     mode: context.mode,
+    dataset: getLocalDataset(),
     screen: context.screen.slice(0, 32),
     type,
     clientAt: Timestamp.fromMillis(Date.now()),
