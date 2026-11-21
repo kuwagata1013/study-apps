@@ -24,7 +24,10 @@ export type ResearchEventType =
   | 'timer_start' // 計測開始・再開
   | 'timer_pause' // 一時停止（seconds = その時点の計測秒数）
   | 'timer_reset' // リセット（seconds = 破棄した計測秒数）
-  | 'timer_finish'; // カウントダウン終了
+  | 'timer_finish' // カウントダウン終了
+  | 'crystal_gain' // ライフクリスタル獲得（label = streak_7 など／chest、count = 個数）
+  | 'crystal_use' // ライフクリスタルで連続記録を守った（count = 使った個数）
+  | 'focus_bonus'; // 25分止めずに続けた集中ボーナス（seconds = 連続した秒数）
 
 export interface ResearchEventInput {
   label?: string; // 教科・BGM名・クエスト名など

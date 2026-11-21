@@ -143,7 +143,10 @@ const EVENT_LABELS: Record<string, string> = {
   timer_start: 'タイマー開始',
   timer_pause: 'タイマー一時停止',
   timer_reset: 'タイマーリセット',
-  timer_finish: 'カウントダウン終了'
+  timer_finish: 'カウントダウン終了',
+  crystal_gain: 'ライフクリスタル獲得',
+  crystal_use: 'ライフクリスタル使用',
+  focus_bonus: '集中ボーナス'
 };
 const eventLabel = (type: string) => EVENT_LABELS[type] ?? type;
 

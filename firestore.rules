@@ -74,7 +74,8 @@ service cloud.firestore {
         && d.type in [
           'app_launch', 'app_resume', 'bgm_select', 'bgm_play', 'bgm_stop', 'tap_summary',
           'quest_add', 'quest_complete', 'quest_uncomplete', 'quest_delete',
-          'timer_start', 'timer_pause', 'timer_reset', 'timer_finish'
+          'timer_start', 'timer_pause', 'timer_reset', 'timer_finish',
+          'crystal_gain', 'crystal_use', 'focus_bonus'
         ]
         && (!('label' in d) || (d.label is string && d.label.size() <= 100))
         && (!('seconds' in d) || (d.seconds is int && d.seconds >= 0 && d.seconds <= 864000))

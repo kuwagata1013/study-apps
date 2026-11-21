@@ -15,7 +15,7 @@ import {
   Volume2, 
   VolumeX, 
   Sparkles,
-  Heart,
+  Gem,
   RefreshCw,
   Lock
 } from 'lucide-react';
@@ -24,7 +24,22 @@ import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
 import './GameStage.css';
 import GameStats from './GameStats';
-import { studyStreak } from './gameStatsUtils';
+import {
+  CHEST_CRYSTAL_CHANCE,
+  CRYSTAL_STREAK_STEP,
+  EXP_PER_MINUTE,
+  FOCUS_BONUS_EXP,
+  FOCUS_BONUS_SECONDS,
+  dayKey,
+  missedDays,
+  streakBonusRate,
+  streakUntilYesterday,
+  studyStreak,
+  MAX_LEVEL,
+  applyExp,
+  expToNext,
+  levelTitle
+} from './gameStatsUtils';
 import { trackEvent } from '../../lib/researchEvents';
 import { useScreenTracking } from '../../lib/useResearchTracking';
 import { useBgm } from '../../lib/useBgm';
@@ -85,15 +100,25 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 2. ゲーミフィケーション・ステート
   const [level, setLevel] = useState(1);
   const [exp, setExp] = useState(0);
+  // ライフクリスタル：連続7日ごとに1個。学習しなかった日を1日1個で埋めて連続記録を守る
   const [lifeTokens, setLifeTokens] = useState(1);
+  // ライフクリスタルで守った日（'YYYY-MM-DD'）
+  const [protectedDays, setProtectedDays] = useState<string[]>([]);
   const [lastStudyTime, setLastStudyTime] = useState<number>(Date.now());
-  const maxExp = level * 100;
+  // 次のレベルに必要な EXP（Lv100 で最大）
+  const isMaxLevel = level >= MAX_LEVEL;
+  const maxExp = expToNext(level);
+  // 最新のレベルと EXP（読み込み直後にも正しく足せるよう state とは別に持つ）
+  const progressRef = useRef({ level: 1, exp: 0 });
 
   // 3. タイマー関連ステート
   const [seconds, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [subject, setSubject] = useState('英語');
   const [memo, setMemo] = useState('');
+  // 集中ボーナス用：今回止めずに続けている秒数と、この計測での最長
+  const [runSeconds, setRunSeconds] = useState(0);
+  const [bestRun, setBestRun] = useState(0);
 
   // 4. アニメーション用フレームステート（1〜8）
   const [currentFrame, setCurrentFrame] = useState(1);
@@ -124,19 +149,27 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     if (hasInitializedRef.current) return;
     hasInitializedRef.current = true;
 
-    const savedLevel = localStorage.getItem('gamified_level');
-    let currentLevel = 1;
-    if (savedLevel) {
-      currentLevel = Number(savedLevel);
-      setLevel(currentLevel);
-    }
-
-    const savedExp = localStorage.getItem('gamified_exp');
-    if (savedExp) setExp(Number(savedExp));
+    // 保存済みのレベルと EXP（今のレベル表に合わせて整える）
+    const savedLevel = Number(localStorage.getItem('gamified_level')) || 1;
+    const savedExp = Number(localStorage.getItem('gamified_exp')) || 0;
+    const loaded = applyExp(savedLevel, savedExp, 0);
+    progressRef.current = loaded;
+    setLevel(loaded.level);
+    setExp(loaded.exp);
 
 
     const savedTokens = localStorage.getItem('gamified_life_tokens');
-    if (savedTokens) setLifeTokens(Number(savedTokens));
+    let crystals = savedTokens ? Number(savedTokens) : 1;
+    if (!Number.isFinite(crystals) || crystals < 0) crystals = 0;
+    setLifeTokens(crystals);
+
+    let loadedProtected: string[] = [];
+    try {
+      loadedProtected = JSON.parse(localStorage.getItem('gamified_protected_days') || '[]');
+    } catch {
+      loadedProtected = [];
+    }
+    setProtectedDays(loadedProtected);
 
     const savedLastTime = localStorage.getItem('gamified_last_study_time');
     const now = Date.now();
@@ -178,6 +211,31 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
     setTasks(loadedTasks);
     localStorage.setItem('gamified_tasks', JSON.stringify(loadedTasks));
+
+    // --- ライフクリスタルで連続記録を守る（1日1回だけ確認） ---
+    const todayKey = dayKey(new Date());
+    if (localStorage.getItem('gamified_streak_check_day') !== todayKey) {
+      localStorage.setItem('gamified_streak_check_day', todayKey);
+      const missed = missedDays(loadedLogs, loadedProtected);
+      if (missed.length > 0) {
+        if (crystals >= missed.length) {
+          crystals -= missed.length;
+          const nextProtected = [...loadedProtected, ...missed];
+          setLifeTokens(crystals);
+          setProtectedDays(nextProtected);
+          localStorage.setItem('gamified_life_tokens', String(crystals));
+          localStorage.setItem('gamified_protected_days', JSON.stringify(nextProtected));
+          trackEvent('crystal_use', { count: missed.length });
+          alert(
+            `💎 ライフクリスタルを ${missed.length} 個使って、連続記録 ${studyStreak(loadedLogs, nextProtected)} 日を守りました！（残り ${crystals} 個）\n今日も学習して記録をのばしましょう。`
+          );
+        } else {
+          alert(
+            `😢 学習しなかった日が ${missed.length} 日あり、ライフクリスタル（${crystals} 個）が足りなかったため連続記録が途切れました。\n今日からまた積み上げましょう！`
+          );
+        }
+      }
+    }
   }, []);
 
   // タイマー作動中（isActive === true）の秒数カウント
@@ -190,6 +248,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       if (delta <= 0) return;
       lastTick += delta * 1000;
       setSeconds((sec) => sec + delta);
+      setRunSeconds((sec) => sec + delta);
     }, 250);
 
     return () => clearInterval(interval);
@@ -222,43 +281,31 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
   // 経験値加算とレベルアップ判定
   const addExp = (gainedExp: number) => {
-    setExp((prevExp) => {
-      setLevel((prevLevel) => {
-        let currentExp = prevExp + gainedExp;
-        let currentLevel = prevLevel;
-        let leveledUp = false;
+    const before = progressRef.current;
+    const after = applyExp(before.level, before.exp, gainedExp);
+    progressRef.current = after;
+    setLevel(after.level);
+    setExp(after.exp);
+    localStorage.setItem('gamified_level', after.level.toString());
+    localStorage.setItem('gamified_exp', after.exp.toString());
 
-        while (currentExp >= currentLevel * 100) {
-          currentExp -= currentLevel * 100;
-          currentLevel += 1;
-          leveledUp = true;
-        }
-
-        localStorage.setItem('gamified_level', currentLevel.toString());
-        localStorage.setItem('gamified_exp', currentExp.toString());
-
-        if (leveledUp) {
-          confetti({
-            particleCount: 120,
-            spread: 80,
-            origin: { y: 0.6 }
-          });
-          alert(`🎉 レベルアップ！ Lv.${currentLevel} になりました！`);
-        }
-
-        return currentLevel;
-      });
-
-      let tempLevel = level;
-      let tempExp = prevExp + gainedExp;
-      while (tempExp >= tempLevel * 100) {
-        tempExp -= tempLevel * 100;
-        tempLevel += 1;
+    if (after.level > before.level) {
+      const newTitle = levelTitle(after.level) !== levelTitle(before.level) ? levelTitle(after.level) : null;
+      if (after.level >= MAX_LEVEL) {
+        // 最大レベル到達は特別な演出
+        const fire = (x: number) => confetti({ particleCount: 160, spread: 100, startVelocity: 55, origin: { x, y: 0.7 } });
+        fire(0.2);
+        fire(0.8);
+        setTimeout(() => fire(0.5), 400);
+        alert(`👑 Lv.${MAX_LEVEL} 到達！ 称号「${levelTitle(after.level)}」を手に入れました！\nここまで続けたあなたは本物の伝説です。`);
+      } else {
+        confetti({ particleCount: newTitle ? 200 : 120, spread: newTitle ? 100 : 80, origin: { y: 0.6 } });
+        alert(
+          `🎉 レベルアップ！ Lv.${after.level} になりました！` + (newTitle ? `\n🏆 新しい称号「${newTitle}」を手に入れました！` : '')
+        );
       }
-      return tempExp;
-    });
+    }
   };
-
   // クエスト自動達成判定
   const checkAndUpdateAutomaticTasks = (savedSubject: string, targetLogs: StudyLog[]) => {
     const todayStr = new Date().toLocaleDateString('ja-JP');
@@ -290,19 +337,28 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   };
 
   const handleSaveLog = async () => {
-    if (seconds < 3) {
-      alert('3秒以上の計測のみ保存されます');
+    // 1分未満は記録しない（短い記録をくり返して EXP を稼げないように）
+    if (seconds < 60) {
+      alert('1分以上学習すると記録できます。もう少し続けてみましょう！');
       return;
     }
 
-    const durationMinutes = Math.max(1, Math.round(seconds / 60));
-    const timeExp = durationMinutes * 20;
+    const durationMinutes = Math.round(seconds / 60);
+    // 学習時間の EXP は秒単位（1分 = 20 EXP）
+    const baseTimeExp = Math.floor((seconds * EXP_PER_MINUTE) / 60);
+    // 連続ボーナス：昨日までの連続日数に応じて学習時間の EXP を増やす
+    const bonusRate = streakBonusRate(streakUntilYesterday(logs, protectedDays));
+    const streakExp = Math.round(baseTimeExp * bonusRate);
+    // 集中ボーナス：止めずに25分続けたら宝箱
+    const focused = Math.max(bestRun, runSeconds) >= FOCUS_BONUS_SECONDS;
+    const chestCrystal = focused && Math.random() < CHEST_CRYSTAL_CHANCE;
+    const focusExp = focused ? FOCUS_BONUS_EXP : 0;
 
     const newLog: StudyLog = {
       id: Date.now().toString(),
       subject,
       durationMinutes,
-      expGained: timeExp,
+      expGained: baseTimeExp + streakExp + focusExp,
       createdAt: new Date().toLocaleString('ja-JP'),
       memo
     };
@@ -317,13 +373,37 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
     const newlyCompletedCount = checkAndUpdateAutomaticTasks(subject, updatedLogs);
     const questExp = 50 * newlyCompletedCount;
-    const totalExpGained = timeExp + questExp;
+    const totalExpGained = baseTimeExp + streakExp + focusExp + questExp;
 
-    if (newlyCompletedCount > 0) {
-      alert(`🎯 【自動達成】条件を達成したクエストが ${newlyCompletedCount} 件クリアされました！ (+${questExp} EXP)\n⏱️ 学習時間報酬 (+${timeExp} EXP)\n合計: +${totalExpGained} EXP 獲得！`);
-    } else {
-      alert(`⏱️ 学習時間報酬として +${timeExp} EXP を獲得しました！`);
+    // ライフクリスタル：宝箱と、連続7日ごとのごほうび
+    let crystalsGained = chestCrystal ? 1 : 0;
+    const streakNow = studyStreak(updatedLogs, protectedDays);
+    const todayKey = dayKey(new Date());
+    const streakReward =
+      streakNow > 0 &&
+      streakNow % CRYSTAL_STREAK_STEP === 0 &&
+      localStorage.getItem('gamified_crystal_award_day') !== todayKey;
+    if (streakReward) {
+      crystalsGained += 1;
+      localStorage.setItem('gamified_crystal_award_day', todayKey);
     }
+    if (crystalsGained > 0) {
+      const next = lifeTokens + crystalsGained;
+      setLifeTokens(next);
+      localStorage.setItem('gamified_life_tokens', String(next));
+      trackEvent('crystal_gain', { label: streakReward ? `streak_${streakNow}` : 'chest', count: crystalsGained });
+    }
+    if (focused) trackEvent('focus_bonus', { label: subject, seconds: Math.max(bestRun, runSeconds) });
+
+    const lines = [`⏱️ 学習時間 +${baseTimeExp} EXP`];
+    if (streakExp > 0) lines.push(`🔥 連続ボーナス（+${Math.round(bonusRate * 100)}%） +${streakExp} EXP`);
+    if (focused) {
+      lines.push(`🎁 集中ボーナス！ 25分続けたごほうびの宝箱から +${focusExp} EXP${chestCrystal ? ' ＋ 💎 ライフクリスタル' : ''}`);
+    }
+    if (newlyCompletedCount > 0) lines.push(`🎯 クエスト ${newlyCompletedCount} 件クリア +${questExp} EXP`);
+    if (streakReward) lines.push(`💎 連続 ${streakNow} 日達成！ ライフクリスタルを1個獲得`);
+    lines.push(`合計 +${totalExpGained} EXP 獲得！`);
+    alert(lines.join('\n'));
 
     const levelAtSave = level;
     addExp(totalExpGained);
@@ -339,9 +419,11 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       expGained: totalExpGained
     });
     sessionStartRef.current = null;
+    setBestRun(0);
 
     setIsActive(false);
     setSeconds(0);
+    setRunSeconds(0);
     setMemo('');
   };
 
@@ -385,9 +467,17 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 状態の見出し（画面上部のタイマーの上に出す）
   const stageStatus = isActive
     ? `冒険中… ${subject}`
-    : seconds > 0
+    : seconds >= 60
       ? '一時停止中（成果を記録できます）'
-      : 'キャンプで休憩中… 「学習開始」で冒険に出発！';
+      : seconds > 0
+        ? '一時停止中（1分から記録できます）'
+        : 'キャンプで休憩中… 「学習開始」で冒険に出発！';
+
+  // 今日の連続ボーナスと、集中ボーナスまでの残り
+  const streakDays = studyStreak(logs, protectedDays);
+  const bonusPercent = Math.round(streakBonusRate(streakUntilYesterday(logs, protectedDays)) * 100);
+  const focusAchieved = Math.max(bestRun, runSeconds) >= FOCUS_BONUS_SECONDS;
+  const focusLeftMin = Math.ceil((FOCUS_BONUS_SECONDS - runSeconds) / 60);
 
   return (
     <div className="game-stage relative h-[100dvh] overflow-hidden bg-slate-950 text-slate-100 antialiased selection:bg-purple-600 selection:text-white">
@@ -436,12 +526,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
             <div className="w-28 md:w-40">
               <div className="flex justify-between text-[9px] font-bold text-[#fdd69f]">
                 <span className="flex items-center gap-0.5"><Zap size={9} className="text-[#fdd69f]" /> EXP</span>
-                <span>{exp} / {maxExp}</span>
+                <span>{isMaxLevel ? "MAX" : `${exp} / ${maxExp}`}</span>
               </div>
               <div className="h-2 mt-0.5 w-full bg-[#312117] rounded-full overflow-hidden border border-[#fdd69f]/30">
                 <div
                   className="h-full bg-[#fdd69f] rounded-full transition-all duration-300"
-                  style={{ width: `${Math.min(100, (exp / maxExp) * 100)}%` }}
+                  style={{ width: isMaxLevel ? "100%" : `${Math.min(100, (exp / maxExp) * 100)}%` }}
                 />
               </div>
             </div>
@@ -458,12 +548,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
           <div className="flex items-center gap-1.5 shrink-0">
             <div className="game-glass flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-[#fdd69f]">
-              <Heart size={14} className="fill-[#fdd69f] text-[#fdd69f]" />
+              <Gem size={14} className="text-[#fdd69f]" aria-label="ライフクリスタル" />
               <span>× {lifeTokens}</span>
             </div>
             <div className="game-glass flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-[#fdd69f]">
               <Flame size={14} className="fill-[#fdd69f] text-[#fdd69f] animate-pulse" />
-              <span>{studyStreak(logs)} 日</span>
+              <span>{streakDays} 日</span>
             </div>
           </div>
         </div>
@@ -481,7 +571,22 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                 {formatTime(seconds)}
               </p>
               <p className="text-[10px] text-white/85 mt-1 flex items-center justify-center gap-1">
-                <Zap size={10} className="text-[#fdd69f]" /> 1分 = +20 EXP ＋ クエスト達成で +50 EXP
+                <Zap size={10} className="text-[#fdd69f]" />
+                <span>1分 = +{EXP_PER_MINUTE} EXP ＋ クエスト達成で +50 EXP</span>
+              </p>
+              {bonusPercent > 0 && (
+                <p className="text-[10px] font-bold text-[#fdd69f] mt-0.5 flex items-center justify-center gap-1">
+                  <Flame size={10} className="text-[#fdd69f]" />
+                  <span>連続ボーナス 学習時間の EXP +{bonusPercent}%</span>
+                </p>
+              )}
+              <p className="text-[10px] text-white/85 mt-0.5 flex items-center justify-center gap-1">
+                <Sparkles size={10} className="text-[#fdd69f]" />
+                {focusAchieved
+                  ? <span className="text-[#fdd69f] font-bold">集中ボーナス達成！ 記録すると宝箱が開きます</span>
+                  : isActive
+                    ? <span>止めずにあと {focusLeftMin} 分で集中ボーナスの宝箱</span>
+                    : <span>止めずに{FOCUS_BONUS_SECONDS / 60}分続けると集中ボーナスの宝箱</span>}
               </p>
               {/* 教科選択 */}
               <div className="flex justify-center flex-wrap gap-1.5 mt-2.5">
@@ -527,6 +632,11 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
               <button
                 onClick={() => {
                   trackEvent(isActive ? 'timer_pause' : 'timer_start', { label: subject, seconds });
+                  if (isActive) {
+                    // 止めたら連続の区切り。それまでの最長だけ覚えておく
+                    setBestRun(Math.max(bestRun, runSeconds));
+                    setRunSeconds(0);
+                  }
                   setIsActive(!isActive);
                 }}
                 className={`flex-1 h-14 rounded-2xl font-black text-base transition flex items-center justify-center gap-2 shadow-xl shadow-black/40 border-2 ${
@@ -543,6 +653,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   if (seconds > 0) trackEvent('timer_reset', { label: subject, seconds });
                   setIsActive(false);
                   setSeconds(0);
+                  setRunSeconds(0);
+                  setBestRun(0);
                   sessionStartRef.current = null;
                 }}
                 className="game-glass w-14 h-14 shrink-0 rounded-2xl text-[#fdd69f] hover:bg-[#fdd69f]/10 transition flex items-center justify-center"
@@ -679,7 +791,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
                 {/* 戦績タブ */}
                 {activeTab === 'stats' && (
-                  <GameStats level={level} exp={exp} maxExp={maxExp} lifeTokens={lifeTokens} logs={logs} tasks={tasks} />
+                  <GameStats level={level} exp={exp} maxExp={maxExp} lifeTokens={lifeTokens} protectedDays={protectedDays} logs={logs} tasks={tasks} />
                 )}
 
                 {/* BGMタブ */}

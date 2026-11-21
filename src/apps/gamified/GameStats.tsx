@@ -1,13 +1,30 @@
 // ゲーム版「戦績」タブ：自分の学習データを見やすくまとめる
 import React, { useMemo, useState } from 'react';
-import { BarChart2, Calendar, Clock, Flame, Heart, ListChecks, Trophy, Zap, BookOpen } from 'lucide-react';
-import { WEEKDAYS, dayKey, formatMinutes, levelTitle, logTime, pad, studyStreak, type StatsLog, type StatsTask } from './gameStatsUtils';
+import { BarChart2, Calendar, Clock, Flame, Gem, ListChecks, Trophy, Zap, BookOpen } from 'lucide-react';
+import {
+  CRYSTAL_STREAK_STEP,
+  EXP_PER_MINUTE,
+  MAX_LEVEL,
+  TITLES,
+  nextTitle,
+  totalExpAt,
+  WEEKDAYS,
+  dayKey,
+  formatMinutes,
+  levelTitle,
+  logTime,
+  pad,
+  studyStreak,
+  type StatsLog,
+  type StatsTask
+} from './gameStatsUtils';
 
 interface GameStatsProps {
   level: number;
   exp: number;
   maxExp: number;
   lifeTokens: number;
+  protectedDays: string[];
   logs: StatsLog[];
   tasks: StatsTask[];
 }
@@ -39,7 +56,7 @@ const Tile: React.FC<{ icon: React.ReactNode; label: string; value: string; sub?
 
 const HISTORY_STEP = 7;
 
-export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTokens, logs, tasks }) => {
+export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTokens, protectedDays, logs, tasks }) => {
   const [historyDays, setHistoryDays] = useState(HISTORY_STEP);
 
   const stats = useMemo(() => {
@@ -106,13 +123,20 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
       last7,
       subjects,
       history,
-      streak: studyStreak(logs)
+      streak: studyStreak(logs, protectedDays)
     };
-  }, [logs]);
+  }, [logs, protectedDays]);
 
   const completedQuests = tasks.filter((t) => t.completed).length;
   const maxDay = Math.max(30, ...stats.last7.map((d) => d.minutes));
-  const expRatio = Math.min(100, (exp / maxExp) * 100);
+  const isMax = level >= MAX_LEVEL;
+  const expRatio = isMax ? 100 : Math.min(100, (exp / maxExp) * 100);
+  // 次の称号と、そこまでの EXP・学習時間の目安（ボーナスなしの場合）
+  const upcoming = nextTitle(level);
+  const toNextTitleExp = upcoming ? totalExpAt(upcoming.level) - totalExpAt(level, exp) : 0;
+  const toNextTitleMin = Math.ceil(toNextTitleExp / EXP_PER_MINUTE);
+  // Lv100 までの進み具合
+  const journeyRatio = Math.min(100, (totalExpAt(level, exp) / totalExpAt(MAX_LEVEL)) * 100);
 
   return (
     <div className="space-y-4">
@@ -135,8 +159,34 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
               />
             </div>
             <p className="text-[10px] text-white/65 mt-1">
-              {exp} / {maxExp} EXP ・ 次のレベルまであと <span className="text-yellow-300 font-bold">{maxExp - exp} EXP</span>
+              {isMax ? (
+                <span className="text-yellow-300 font-bold">最大レベル到達！ おめでとうございます</span>
+              ) : (
+                <>
+                  {exp} / {maxExp} EXP ・ 次のレベルまであと <span className="text-yellow-300 font-bold">{maxExp - exp} EXP</span>
+                </>
+              )}
             </p>
+          </div>
+        </div>
+
+        {/* 次の称号と Lv100 までの道のり */}
+        <div className="mt-4 pt-3 border-t border-[#fdd69f]/15 space-y-2">
+          {upcoming && (
+            <p className="text-[11px] text-white">
+              次の称号 <span className="font-black text-[#fdd69f]">「{upcoming.name}」</span>（Lv.{upcoming.level}）まで あと{' '}
+              <span className="font-bold text-yellow-300">{toNextTitleExp.toLocaleString()} EXP</span>
+              <span className="text-white/60">（学習 約{formatMinutes(toNextTitleMin)}）</span>
+            </p>
+          )}
+          <div>
+            <div className="flex justify-between text-[10px] text-white/65">
+              <span>Lv.{MAX_LEVEL}「{TITLES[TITLES.length - 1].name}」への道のり</span>
+              <span className="font-bold text-white">{journeyRatio.toFixed(1)}%</span>
+            </div>
+            <div className="mt-1 h-1.5 w-full bg-[#4a3424] rounded-full overflow-hidden">
+              <div className="h-full bg-[#fdd69f] rounded-full" style={{ width: `${journeyRatio}%` }} />
+            </div>
           </div>
         </div>
       </div>
@@ -166,7 +216,13 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
           value={`${completedQuests} / ${tasks.length}`}
           accent="text-pink-300"
         />
-        <Tile icon={<Heart size={12} />} label="救済アイテム" value={`× ${lifeTokens}`} accent="text-red-400" />
+        <Tile
+          icon={<Gem size={12} />}
+          label="ライフクリスタル"
+          value={`× ${lifeTokens}`}
+          sub={`連続${CRYSTAL_STREAK_STEP}日ごとに1個・休んだ日を守る`}
+          accent="text-cyan-300"
+        />
         <Tile
           icon={<BookOpen size={12} />}
           label="1回あたり"
