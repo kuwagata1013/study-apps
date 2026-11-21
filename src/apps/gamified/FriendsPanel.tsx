@@ -60,9 +60,15 @@ export const AccountIdCopy: React.FC<{ uid: string }> = ({ uid }) => {
 };
 
 // プレイヤー名の表示と変更
-export const PlayerNameEditor: React.FC<{ name: string; onSave: (name: string) => void }> = ({ name, onSave }) => {
+// onSave はエラー文（なければ null）を返す
+export const PlayerNameEditor: React.FC<{ name: string; onSave: (name: string) => Promise<string | null> }> = ({
+  name,
+  onSave
+}) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   if (!editing) {
     return (
@@ -71,6 +77,7 @@ export const PlayerNameEditor: React.FC<{ name: string; onSave: (name: string) =
         <button
           onClick={() => {
             setDraft(name);
+            setError('');
             setEditing(true);
           }}
           className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#fdd69f]/30 text-[#fdd69f] text-[11px] font-bold hover:bg-[#fdd69f]/10 transition"
@@ -81,16 +88,25 @@ export const PlayerNameEditor: React.FC<{ name: string; onSave: (name: string) =
     );
   }
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const next = normalizeName(draft);
-    if (!next) return;
-    onSave(next);
-    setEditing(false);
+    if (!next || saving) return;
+    if (next === name) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    setError('');
+    const err = await onSave(next);
+    setSaving(false);
+    if (err) setError(err);
+    else setEditing(false);
   };
 
   return (
-    <form onSubmit={submit} className="flex items-center gap-2">
+    <form onSubmit={submit} className="space-y-1">
+    <div className="flex items-center gap-2">
       <input
         autoFocus
         value={draft}
@@ -101,23 +117,25 @@ export const PlayerNameEditor: React.FC<{ name: string; onSave: (name: string) =
       />
       <button
         type="submit"
-        disabled={!normalizeName(draft)}
+        disabled={!normalizeName(draft) || saving}
         className="shrink-0 px-3 py-2 rounded-lg bg-[#fdd69f] text-[#312117] text-[11px] font-bold disabled:opacity-40"
       >
-        保存
+        {saving ? '保存中' : '保存'}
       </button>
       <button type="button" onClick={() => setEditing(false)} className="shrink-0 p-2 text-white/60 hover:text-white" aria-label="やめる">
         <X size={14} />
       </button>
+    </div>
+      {error && <p className="text-[11px] text-red-300">{error}</p>}
     </form>
   );
 };
 
 const RESULT_TEXT: Record<AddFriendResult, string> = {
   added: 'フレンドに追加しました！',
-  self: '自分のアカウントIDです',
-  invalid: 'アカウントIDの形が正しくありません',
-  not_found: 'このIDの冒険者は見つかりませんでした（相手が一度ゲーム版を開くと見つかるようになります）',
+  self: 'それはあなた自身です',
+  invalid: 'プレイヤー名かアカウントIDを入力してください',
+  not_found: 'その名前・IDの冒険者は見つかりませんでした',
   already: 'すでにフレンドです',
   full: `フレンドは ${MAX_FRIENDS} 人までです`
 };
@@ -205,20 +223,20 @@ export const FriendsPanel: React.FC<{ uid: string | null }> = ({ uid }) => {
       ) : (
         <>
           <div className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2">
-            <p className="text-[11px] font-bold text-white/70">あなたのアカウントID（フレンドに教えてください）</p>
+            <p className="text-[11px] font-bold text-white/70">あなたのアカウントID（名前のかわりに教えることもできます）</p>
             <AccountIdCopy uid={uid} />
           </div>
 
           <form onSubmit={onAdd} className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2">
-            <p className="text-[11px] font-bold text-white/70">フレンドのアカウントIDを入力して追加</p>
+            <p className="text-[11px] font-bold text-white/70">フレンドのプレイヤー名かアカウントIDで追加</p>
             <div className="flex items-center gap-2">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="アカウントIDを貼り付け"
+                placeholder="プレイヤー名 または アカウントID"
                 autoComplete="off"
                 spellCheck={false}
-                className="flex-1 min-w-0 px-3 py-2 bg-[#312117] border border-[#fdd69f]/15 rounded-lg font-mono text-xs text-white focus:outline-none focus:border-[#fdd69f]/50"
+                className="flex-1 min-w-0 px-3 py-2 bg-[#312117] border border-[#fdd69f]/15 rounded-lg text-xs text-white focus:outline-none focus:border-[#fdd69f]/50"
               />
               <button
                 type="submit"

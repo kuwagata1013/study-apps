@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   onAuthStateChanged, 
   signOut, 
-  updateProfile, 
   type User as FirebaseUser 
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -13,7 +12,9 @@ import StartApp from './apps/start/StartApp';
 import GamifiedApp from './apps/gamified/GamifiedApp';
 import SimpleApp from './apps/simple/SimpleApp';
 import AdminApp from './apps/admin/AdminApp';
-import { Settings, LogOut, User, RefreshCw, Save, Shield, Upload, Lock } from 'lucide-react';
+import NameSetup from './apps/start/NameSetup';
+import { claimPlayerName, getCachedName, loadMyName } from './lib/players';
+import { Shield } from 'lucide-react';
 
 type AppMode = 'start' | 'simple' | 'gamified' | 'admin';
 
@@ -26,19 +27,17 @@ export const App: React.FC = () => {
       ? savedMode
       : 'start';
   });
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // プレイヤー名（ログイン後に本人が決める。Google アカウントの名前は使わない）
+  // none: 未ログイン / checking: 確認中 / ready: 決定済み / missing: まだ決めていない
+  const [playerName, setPlayerName] = useState('');
+  const [nameStatus, setNameStatus] = useState<'none' | 'checking' | 'ready' | 'missing'>('none');
 
   // 管理者画面アクセス保護用
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(false);
   const [adminAuthError, setAdminAuthError] = useState('');
 
-
-  // プロフィール編集用ステート
-  const [displayName, setDisplayName] = useState('');
-  const [photoURL, setPhotoURL] = useState('');
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [message, setMessage] = useState('');
 
   // 認証状態の監視
   useEffect(() => {
@@ -47,14 +46,57 @@ export const App: React.FC = () => {
       // 行動データ：ログイン状態がわかってから起動を記録する
       setEventUser(currentUser?.uid);
       startEventTracking();
-      if (currentUser) {
-        setDisplayName(currentUser.displayName || '');
-        setPhotoURL(currentUser.photoURL || '');
-      }
     });
 
     return () => unsubscribe();
   }, []);
+
+  // ログインしたら、名前が決まっているか確認する（端末に覚えていればすぐ表示し、裏でサーバーと照らし合わせる）
+  const uid = user?.uid ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    if (!uid) {
+      setPlayerName('');
+      setNameStatus('none');
+      return;
+    }
+    const cached = getCachedName(uid);
+    setPlayerName(cached);
+    setNameStatus(cached ? 'ready' : 'checking');
+    loadMyName(uid)
+      .then((name) => {
+        if (cancelled) return;
+        if (name) {
+          setPlayerName(name);
+          setNameStatus('ready');
+        } else {
+          setNameStatus('missing');
+        }
+      })
+      .catch((e) => {
+        console.error('プレイヤー名の確認に失敗:', e);
+        // 通信できないときは、端末に覚えている名前があればそのまま使う
+        if (!cancelled && !cached) setNameStatus('missing');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+
+  // 名前を変える（使われている名前ならエラー文を返す）
+  const renamePlayer = async (name: string): Promise<string | null> => {
+    if (!uid) return 'ログインすると名前を変えられます';
+    try {
+      const result = await claimPlayerName(uid, name, playerName);
+      if (result === 'taken') return 'この名前はほかの冒険者が使っています';
+      if (result === 'invalid') return '名前を入力してください';
+      setPlayerName(name);
+      return null;
+    } catch (e) {
+      console.error('名前の変更に失敗:', e);
+      return '名前を保存できませんでした。通信状態を確認してください';
+    }
+  };
 
   // 行動データに現在のモードを付ける
   useEffect(() => {
@@ -71,47 +113,6 @@ export const App: React.FC = () => {
   const handleResetMode = () => {
     localStorage.removeItem('study_app_preferred_mode');
     setMode('start');
-    setIsSettingsOpen(false);
-  };
-
-  // ローカル画像ファイルの読み込み (Base64変換)
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('画像サイズは2MB以下にしてください');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoURL(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // プロフィール更新
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!auth.currentUser) return;
-
-    setIsUpdating(true);
-    setMessage('');
-
-    try {
-      await updateProfile(auth.currentUser, {
-        displayName: displayName,
-        photoURL: photoURL
-      });
-      setUser({ ...auth.currentUser } as FirebaseUser);
-      setMessage('プロフィールを更新しました！');
-      setTimeout(() => setMessage(''), 3000);
-    } catch (error) {
-      console.error('プロフィール更新エラー:', error);
-      setMessage('更新に失敗しました。');
-    } finally {
-      setIsUpdating(false);
-    }
   };
 
   const openAdminAuth = () => {
@@ -133,7 +134,6 @@ export const App: React.FC = () => {
       if (adminDoc.exists()) {
         setMode('admin');
         setIsAdminAuthOpen(false);
-        setIsSettingsOpen(false);
       } else {
         setAdminAuthError('このアカウントには管理者権限がありません');
       }
@@ -150,17 +150,38 @@ export const App: React.FC = () => {
     try {
       await signOut(auth);
       setUser(null);
-      setIsSettingsOpen(false);
-    } catch (error) {
+      } catch (error) {
       console.error('ログアウトエラー:', error);
     }
   };
+
+  // ログインしていて名前がまだなら、先に名前を決めてもらう（管理者画面は除く）
+  if (user && mode !== 'admin' && nameStatus === 'checking') {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center text-xs text-gray-400">
+        読み込み中...
+      </div>
+    );
+  }
+  if (user && mode !== 'admin' && nameStatus === 'missing') {
+    return (
+      <NameSetup
+        uid={user.uid}
+        initialName={playerName}
+        onDone={(name) => {
+          setPlayerName(name);
+          setNameStatus('ready');
+        }}
+        onLogout={handleLogout}
+      />
+    );
+  }
 
   return (
     <div className="relative min-h-screen bg-gray-50">
       {/* メイン画面切替 */}
       {mode === 'start' && (
-        <StartApp onSelectMode={handleSelectMode} user={user} />
+        <StartApp onSelectMode={handleSelectMode} user={user} playerName={playerName} />
       )}
 
       {mode === 'simple' && (
@@ -174,6 +195,8 @@ export const App: React.FC = () => {
       {mode === 'gamified' && (
         <GamifiedApp
           user={user}
+          playerName={playerName}
+          onRenamePlayer={renamePlayer}
           onOpenAdmin={openAdminAuth}
           onResetMode={handleResetMode}
         />
@@ -181,146 +204,6 @@ export const App: React.FC = () => {
 
       {mode === 'admin' && (
         <AdminApp onExitAdmin={() => setMode('start')} />
-      )}
-
-      {/* 
-        ※ 右上にあった設定アイコンボタン (Settings) はマイページへの完全移設に伴い撤去しました 
-      */}
-
-      {/* 設定・プロフィール編集モーダル（マイページ等からトリガーされる用） */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-xl space-y-6 max-h-[90vh] overflow-y-auto">
-            
-            <div className="flex justify-between items-center border-b pb-3">
-              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                <Settings size={20} /> 設定・アカウント管理
-              </h2>
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="text-gray-400 hover:text-gray-600 font-bold text-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* アカウント・アイコン画像変更 */}
-            {user ? (
-              <form onSubmit={handleUpdateProfile} className="space-y-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-                  プロフィール設定
-                </span>
-
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-200 border border-gray-300 flex items-center justify-center shrink-0">
-                    {photoURL ? (
-                      <img src={photoURL} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <User size={28} className="text-gray-400" />
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-500 overflow-hidden">
-                    <p className="font-bold text-gray-800 truncate">{user.displayName || '未設定'}</p>
-                    <p className="truncate">{user.email}</p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">名前</label>
-                  <input
-                    type="text"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    placeholder="表示名を入力"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">アイコン画像</label>
-                  <div className="space-y-2">
-                    <input
-                      type="url"
-                      value={photoURL}
-                      onChange={(e) => setPhotoURL(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      placeholder="画像URLを入力 (https://...)"
-                    />
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageFileUpload}
-                        className="hidden"
-                        id="icon-upload-input"
-                      />
-                      <label
-                        htmlFor="icon-upload-input"
-                        className="w-full py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition"
-                      >
-                        <Upload size={14} /> PC・スマホから画像を選択
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                {message && (
-                  <p className="text-xs font-semibold text-green-600 text-center">{message}</p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isUpdating}
-                  className="w-full py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <Save size={16} />
-                  {isUpdating ? '更新中...' : 'プロフィールを保存'}
-                </button>
-              </form>
-            ) : (
-              <div className="p-4 bg-gray-50 rounded-2xl text-center text-xs text-gray-500">
-                ゲストとして利用中
-              </div>
-            )}
-
-            {/* アプリ設定 */}
-            <div className="space-y-3 pt-2 border-t">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-                アプリ設定・検証
-              </span>
-
-              <button
-                onClick={handleResetMode}
-                className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2"
-              >
-                <RefreshCw size={16} />
-                モードを再選択する（スタート画面へ）
-              </button>
-
-              <button
-                onClick={openAdminAuth}
-                className="w-full py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-purple-100"
-              >
-                <Lock size={16} />
-                管理者用データ分析ページ（管理者アカウント限定）
-              </button>
-            </div>
-
-            {/* ログアウト */}
-            {user && (
-              <div className="pt-2 border-t">
-                <button
-                  onClick={handleLogout}
-                  className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-red-100"
-                >
-                  <LogOut size={16} />
-                  ログアウト
-                </button>
-              </div>
-            )}
-
-          </div>
-        </div>
       )}
 
       {/* 管理者アクセス確認モーダル */}

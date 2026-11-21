@@ -25,7 +25,7 @@ import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
 import QuestCalendar from './QuestCalendar';
 import { AccountIdCopy, FriendsPanel, PlayerNameEditor } from './FriendsPanel';
-import { getLocalPlayerName, savePlayer, setLocalPlayerName } from '../../lib/players';
+import { savePlayerStats } from '../../lib/players';
 import './GameStage.css';
 import GameStats from './GameStats';
 import {
@@ -73,6 +73,8 @@ const SAMPLE_TASK_IDS = ['daily_login', 'timer_1min'];
 
 interface GamifiedAppProps {
   user?: any;
+  playerName?: string; // ログイン後に決めたプレイヤー名
+  onRenamePlayer?: (name: string) => Promise<string | null>;
   onOpenAdmin?: () => void;
   onResetMode?: () => void;
 }
@@ -98,6 +100,8 @@ interface Task {
 
 export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   user,
+  playerName = '',
+  onRenamePlayer,
   onOpenAdmin,
   onResetMode
 }) => {
@@ -490,26 +494,21 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 今日の連続ボーナスと、集中ボーナスまでの残り
   const streakDays = studyStreak(logs, protectedDays);
 
-  // プレイヤー名（端末に保存。未設定ならログイン名）
-  const [playerName, setPlayerName] = useState(() => getLocalPlayerName());
-  const shownName = playerName || user?.displayName || (user ? '冒険者' : 'ゲスト冒険者');
-  const changePlayerName = (name: string) => {
-    setPlayerName(name);
-    setLocalPlayerName(name);
-  };
+  // プレイヤー名（ログイン後に決めた名前。Google アカウントの名前は使わない）
+  const shownName = playerName || (user ? '冒険者' : 'ゲスト冒険者');
 
-  // フレンドに見せるプロフィール（名前・レベル・称号・連続日数）を保存する。
+  // フレンドに見せるプロフィール（レベル・称号・連続日数）を保存する。
   // 起動直後の読み込み中の値を書かないよう、少し待ってから保存する
   const uid: string | null = user?.uid ?? null;
   useEffect(() => {
-    if (!uid) return;
+    if (!uid || !playerName) return;
     const t = setTimeout(() => {
-      savePlayer({ uid, name: shownName, level, title: levelTitle(level), streakDays }).catch((e) =>
+      savePlayerStats(uid, { level, title: levelTitle(level), streakDays }).catch((e) =>
         console.error('プロフィールの保存に失敗:', e)
       );
     }, 1500);
     return () => clearTimeout(t);
-  }, [uid, shownName, level, streakDays]);
+  }, [uid, playerName, level, streakDays]);
   const bonusPercent = Math.round(streakBonusRate(streakUntilYesterday(logs, protectedDays)) * 100);
   const focusAchieved = Math.max(bestRun, runSeconds) >= FOCUS_BONUS_SECONDS;
 
@@ -953,7 +952,11 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                     <div className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-3 text-xs">
                       <div className="space-y-1.5">
                         <span className="text-white/50">プレイヤー名</span>
-                        <PlayerNameEditor name={shownName} onSave={changePlayerName} />
+                        {uid && onRenamePlayer ? (
+                          <PlayerNameEditor name={shownName} onSave={onRenamePlayer} />
+                        ) : (
+                          <p className="font-bold text-white text-sm">{shownName}<span className="ml-2 text-[11px] font-normal text-white/45">ログインすると名前を決められます</span></p>
+                        )}
                       </div>
                       <div className="flex justify-between">
                         <span className="text-white/50">参加者ID:</span>

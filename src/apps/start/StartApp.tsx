@@ -13,9 +13,10 @@ import {
 interface StartAppProps {
   onSelectMode: (mode: 'simple' | 'gamified') => void;
   user: any;
+  playerName?: string;
 }
 
-export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user }) => {
+export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerName }) => {
   const [loading, setLoading] = useState(false);
   const [participantInput, setParticipantInput] = useState(getParticipantId());
   const [participantError, setParticipantError] = useState('');
@@ -79,7 +80,7 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user }) => {
                   {user.photoURL ? (
                     <img 
                       src={user.photoURL} 
-                      alt={user.displayName || 'ユーザー'} 
+                      alt={playerName || 'ユーザー'} 
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
                     />
@@ -88,7 +89,7 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user }) => {
                   )}
                 </div>
                 <div className="text-left overflow-hidden">
-                  <p className="text-sm font-bold text-gray-900 truncate">{user.displayName || 'ログイン中'}</p>
+                  <p className="text-sm font-bold text-gray-900 truncate">{playerName || 'ログイン中'}</p>
                   <p className="text-[10px] text-gray-400 truncate">{user.email}</p>
                 </div>
               </div>
