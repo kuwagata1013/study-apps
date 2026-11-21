@@ -23,6 +23,7 @@ import {
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
+import QuestCalendar from './QuestCalendar';
 import './GameStage.css';
 import GameStats from './GameStats';
 import {
@@ -90,6 +91,7 @@ interface Task {
   isAutomatic?: boolean;
   subject?: string;
   targetMinutes?: number;
+  completedDateKey?: string; // クリアした日（YYYY-MM-DD）
 }
 
 export const GamifiedApp: React.FC<GamifiedAppProps> = ({
@@ -332,7 +334,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
         if (subjectTotalMinutes >= task.targetMinutes) {
           newlyCompletedCount++;
           trackEvent('quest_complete', { label: task.title, count: task.targetMinutes });
-          return { ...task, completed: true };
+          return { ...task, completed: true, completedDateKey: dayKey(new Date()) };
         }
       }
       return task;
@@ -692,6 +694,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
           <main className="max-w-md md:max-w-4xl mx-auto px-4 pt-20 md:pt-24 pb-28 md:pb-10">
                 {/* クエストタブ */}
                 {activeTab === 'todo' && (
+                  <div className="space-y-4">
                   <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
                     <div className="flex items-center">
                       <h2 className="text-base font-bold text-white flex items-center gap-2 whitespace-nowrap shrink-0">
@@ -803,6 +806,9 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  <QuestCalendar logs={logs} tasks={tasks} protectedDays={protectedDays} />
                   </div>
                 )}
 
