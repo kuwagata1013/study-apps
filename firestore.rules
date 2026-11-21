@@ -100,6 +100,37 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
+    // フレンド機能: 公開プロフィール（名前・レベル・称号・連続日数）
+    // ログインした人がアカウントIDを指定して1件ずつ読める（一覧はできない）。書けるのは本人だけ
+    match /players/{uid} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && isValidPlayer(request.resource.data);
+      allow delete: if request.auth != null && request.auth.uid == uid;
+
+      // 自分のフレンド一覧（相手のアカウントIDをドキュメントIDにする）。本人だけ読み書きできる
+      match /friends/{friendId} {
+        allow read, delete: if request.auth != null && request.auth.uid == uid;
+        allow update: if false;
+        allow create: if request.auth != null && request.auth.uid == uid
+          && friendId != uid
+          && exists(/databases/$(database)/documents/players/$(friendId))
+          && request.resource.data.keys().hasOnly(['addedAt'])
+          && request.resource.data.addedAt == request.time;
+      }
+    }
+
+    function isValidPlayer(d) {
+      return d.keys().hasOnly(['name', 'level', 'title', 'streakDays', 'updatedAt'])
+        && d.keys().hasAll(['name', 'level', 'title', 'streakDays', 'updatedAt'])
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 20
+        && d.level is int && d.level >= 1 && d.level <= 100
+        && d.title is string && d.title.size() <= 40
+        && d.streakDays is int && d.streakDays >= 0 && d.streakDays <= 100000
+        && d.updatedAt == request.time;
+    }
+
     // それ以外はすべて拒否
     match /{document=**} {
       allow read, write: if false;

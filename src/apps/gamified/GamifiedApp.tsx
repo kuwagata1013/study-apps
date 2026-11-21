@@ -24,6 +24,8 @@ import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
 import QuestCalendar from './QuestCalendar';
+import { AccountIdCopy, FriendsPanel, PlayerNameEditor } from './FriendsPanel';
+import { getLocalPlayerName, savePlayer, setLocalPlayerName } from '../../lib/players';
 import './GameStage.css';
 import GameStats from './GameStats';
 import {
@@ -487,6 +489,27 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
   // 今日の連続ボーナスと、集中ボーナスまでの残り
   const streakDays = studyStreak(logs, protectedDays);
+
+  // プレイヤー名（端末に保存。未設定ならログイン名）
+  const [playerName, setPlayerName] = useState(() => getLocalPlayerName());
+  const shownName = playerName || user?.displayName || (user ? '冒険者' : 'ゲスト冒険者');
+  const changePlayerName = (name: string) => {
+    setPlayerName(name);
+    setLocalPlayerName(name);
+  };
+
+  // フレンドに見せるプロフィール（名前・レベル・称号・連続日数）を保存する。
+  // 起動直後の読み込み中の値を書かないよう、少し待ってから保存する
+  const uid: string | null = user?.uid ?? null;
+  useEffect(() => {
+    if (!uid) return;
+    const t = setTimeout(() => {
+      savePlayer({ uid, name: shownName, level, title: levelTitle(level), streakDays }).catch((e) =>
+        console.error('プロフィールの保存に失敗:', e)
+      );
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [uid, shownName, level, streakDays]);
   const bonusPercent = Math.round(streakBonusRate(streakUntilYesterday(logs, protectedDays)) * 100);
   const focusAchieved = Math.max(bestRun, runSeconds) >= FOCUS_BONUS_SECONDS;
 
@@ -918,18 +941,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                 )}
 
                 {/* フレンドタブ */}
-                {activeTab === 'friends' && (
-                  <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
-                    <h2 className="text-base font-bold text-white flex items-center gap-2">
-                      <Users size={18} className="text-[#fdd69f]" /> フレンド
-                    </h2>
-                    <div className="p-6 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 text-center space-y-2">
-                      <Users size={32} className="mx-auto text-[#fdd69f]/60" />
-                      <p className="text-sm font-bold text-white">フレンドはまだいません</p>
-                      <p className="text-xs text-white/55">フレンド機能は準備中です</p>
-                    </div>
-                  </div>
-                )}
+                {activeTab === 'friends' && <FriendsPanel uid={uid} />}
 
                 {/* プロフィールタブ */}
                 {activeTab === 'profile' && (
@@ -938,18 +950,18 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                       <User size={18} className="text-[#fdd69f]" /> プロフィール
                     </h2>
 
-                    <div className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-white/50">プレイヤー名:</span>
-                        <span className="font-bold text-white">{user ? user.displayName || 'ログイン中' : 'ゲスト冒険者'}</span>
+                    <div className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-3 text-xs">
+                      <div className="space-y-1.5">
+                        <span className="text-white/50">プレイヤー名</span>
+                        <PlayerNameEditor name={shownName} onSave={changePlayerName} />
                       </div>
                       <div className="flex justify-between">
                         <span className="text-white/50">参加者ID:</span>
                         <span className="font-mono font-bold text-white">{getParticipantId() || '未入力'}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-white/50">アカウントID:</span>
-                        <span className="font-mono text-white/65">{user ? user.uid : 'anonymous'}</span>
+                      <div className="space-y-1.5">
+                        <span className="text-white/50">アカウントID（フレンド追加に使います）</span>
+                        {uid ? <AccountIdCopy uid={uid} /> : <p className="text-white/45">ログインすると表示されます</p>}
                       </div>
                     </div>
 
