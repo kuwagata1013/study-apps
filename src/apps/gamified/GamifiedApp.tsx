@@ -7,6 +7,7 @@ import {
   BarChart2, 
   Music, 
   User, 
+  Users,
   Play, 
   Pause, 
   RotateCcw, 
@@ -97,7 +98,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   onResetMode
 }) => {
   // 1. タブ管理
-  const [activeTab, setActiveTab] = useState<'timer' | 'todo' | 'stats' | 'bgm' | 'profile'>('timer');
+  const [activeTab, setActiveTab] = useState<'timer' | 'todo' | 'stats' | 'bgm' | 'friends' | 'profile'>('timer');
 
   // 2. ゲーミフィケーション・ステート
   const [level, setLevel] = useState(1);
@@ -531,7 +532,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
               <span className="text-[7px] font-bold text-[#312117] leading-none">Lv.</span>
               <span className="text-sm font-black text-[#312117] leading-none">{level}</span>
             </div>
-            <div className="w-28 md:w-40">
+            <div className="w-28 lg:w-40">
               {/* 称号 */}
               <p className="text-[11px] font-black text-white leading-tight truncate" title={levelTitle(level)}>
                 {levelTitle(level)}
@@ -550,20 +551,21 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
           </div>
 
           {/* PC用ナビゲーションタブ */}
-          <nav className="hidden md:flex game-glass rounded-full p-1 items-center gap-1 text-xs font-bold">
-            <button onClick={() => setActiveTab('timer')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'timer' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>冒険</button>
-            <button onClick={() => setActiveTab('todo')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'todo' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>クエスト</button>
-            <button onClick={() => setActiveTab('stats')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'stats' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>戦績</button>
-            <button onClick={() => setActiveTab('bgm')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'bgm' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>BGM</button>
-            <button onClick={() => setActiveTab('profile')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'profile' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>プレイヤー</button>
+          <nav className="hidden md:flex shrink-0 game-glass rounded-full p-1 items-center gap-0.5 lg:gap-1 text-xs font-bold">
+            <button onClick={() => setActiveTab('timer')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'timer' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>冒険</button>
+            <button onClick={() => setActiveTab('todo')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'todo' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>クエスト</button>
+            <button onClick={() => setActiveTab('stats')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'stats' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>戦績</button>
+            <button onClick={() => setActiveTab('bgm')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'bgm' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>BGM</button>
+            <button onClick={() => setActiveTab('friends')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'friends' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>フレンド</button>
+            <button onClick={() => setActiveTab('profile')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'profile' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>プロフィール</button>
           </nav>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            <div className="game-glass flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-[#fdd69f]">
+            <div className="game-glass flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-[#fdd69f] whitespace-nowrap">
               <Gem size={14} className="text-[#fdd69f]" aria-label="ライフクリスタル" />
               <span>× {lifeTokens}</span>
             </div>
-            <div className="game-glass flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-[#fdd69f]">
+            <div className="game-glass flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-[#fdd69f] whitespace-nowrap">
               <Flame size={14} className="fill-[#fdd69f] text-[#fdd69f] animate-pulse" />
               <span>{streakDays} 日</span>
             </div>
@@ -691,13 +693,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                 {/* クエストタブ */}
                 {activeTab === 'todo' && (
                   <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
-                    <div className="flex justify-between items-center">
+                    <div className="flex items-center">
                       <h2 className="text-base font-bold text-white flex items-center gap-2 whitespace-nowrap shrink-0">
                         <CheckSquare size={18} className="text-[#fdd69f]" /> クエストボード
                       </h2>
-                      <span className="text-[10px] text-white bg-[#4a3424]/60 border border-[#fdd69f]/30 px-2.5 py-1 rounded-full">
-                        同一教科の目標時間達成で自動クリア (+50 EXP)
-                      </span>
                     </div>
 
                     <form onSubmit={handleAddTask} className="bg-[#1f140d]/80 p-3.5 rounded-2xl border border-[#fdd69f]/15 space-y-3">
@@ -912,11 +911,25 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   </div>
                 )}
 
-                {/* プレイヤープロファイルタブ */}
+                {/* フレンドタブ */}
+                {activeTab === 'friends' && (
+                  <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <Users size={18} className="text-[#fdd69f]" /> フレンド
+                    </h2>
+                    <div className="p-6 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 text-center space-y-2">
+                      <Users size={32} className="mx-auto text-[#fdd69f]/60" />
+                      <p className="text-sm font-bold text-white">フレンドはまだいません</p>
+                      <p className="text-xs text-white/55">フレンド機能は準備中です</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* プロフィールタブ */}
                 {activeTab === 'profile' && (
                   <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
                     <h2 className="text-base font-bold text-white flex items-center gap-2">
-                      <User size={18} className="text-[#fdd69f]" /> 冒険者プロファイル
+                      <User size={18} className="text-[#fdd69f]" /> プロフィール
                     </h2>
 
                     <div className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2 text-xs">
@@ -978,8 +991,11 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
         <button onClick={() => setActiveTab('bgm')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'bgm' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <Music size={16} /> <span>BGM</span>
         </button>
+        <button onClick={() => setActiveTab('friends')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'friends' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
+          <Users size={16} /> <span>フレンド</span>
+        </button>
         <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'profile' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
-          <User size={16} /> <span>プレイヤー</span>
+          <User size={16} /> <span>プロフィール</span>
         </button>
       </nav>
     </div>
