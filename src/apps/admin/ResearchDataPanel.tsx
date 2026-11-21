@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity, Check, Database, Download, FileSpreadsheet, Flag, FolderPlus, ListChecks, MousePointerClick, Music, Pencil, Power,
-  RefreshCw, Timer, Users, Clock, X
+  RefreshCw, RotateCcw, Timer, Users, Clock, X
 } from 'lucide-react';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { fetchAdminUids } from '../../lib/admins';
 import { db } from '../../firebase';
-import { DATASET_NAME_MAX, datasetLabel, fetchDatasetInfo, renameDataset, startNextDataset } from '../../lib/dataset';
+import { DATASET_NAME_MAX, datasetLabel, fetchDatasetInfo, renameDataset, setRecordingDataset } from '../../lib/dataset';
 import { downloadXlsx, type Sheet } from '../../lib/xlsx';
 
 // ===== 型と変換 =====
@@ -526,7 +526,8 @@ export const ResearchDataPanel: React.FC = () => {
       alert('現在のデータ番号を読み込めていません。「最新の状態に更新」を押してからもう一度お試しください。');
       return;
     }
-    const next = currentDataset + 1;
+    // 前のデータに戻しているときも、次は今までで一番大きい番号の次から
+    const next = (datasetOptions[datasetOptions.length - 1] ?? currentDataset) + 1;
     const ok = confirm(
       `${labelOf(next)} の記録を開始しますか？
 
@@ -535,15 +536,12 @@ export const ResearchDataPanel: React.FC = () => {
 ` +
         `・${labelOf(currentDataset)} までの記録は消えず、この画面で切り替えて見られます
 ` +
-        `・参加者が次にアプリを開くと、端末のレベル・EXP・クエスト・学習履歴が初期化されます（参加者IDは残ります）
-
-` +
-        `この操作は元に戻せません。`
+        `・参加者が次にアプリを開くと、端末のレベル・EXP・クエスト・学習履歴が初期化されます（参加者IDは残ります。今の進み具合は端末にしまわれ、あとで「このデータの記録に戻す」と戻ります）`
     );
     if (!ok) return;
     setIsStartingNext(true);
     try {
-      await startNextDataset(next);
+      await setRecordingDataset(next);
       setCurrentDataset(next);
       setDatasetFilter(String(next));
       alert(`${labelOf(next)} を開始しました。名前は「名前を変更」から付けられます。`);
@@ -557,6 +555,36 @@ export const ResearchDataPanel: React.FC = () => {
 
   // 表示中のデータの名前を変える
   const selectedDataset = datasetFilter && datasetFilter !== 'all' ? Number(datasetFilter) : null;
+
+  // 前のデータ（または後のデータ）の記録に戻す
+  const [isSwitching, setIsSwitching] = useState(false);
+  const handleSwitchTo = async (n: number) => {
+    if (currentDataset === null || n === currentDataset) return;
+    const ok = confirm(
+      `記録するデータを「${labelOf(currentDataset)}」から「${labelOf(n)}」に切り替えますか？
+
+` +
+        `・これ以降の学習ログと行動データは「${labelOf(n)}」として保存されます（${labelOf(currentDataset)} の記録は消えません）
+` +
+        `・参加者が次にアプリを開くと、端末の進み具合が ${labelOf(n)} のときのものに戻ります
+` +
+        `  （${labelOf(currentDataset)} の進み具合は端末にしまわれます。${labelOf(n)} の進み具合が残っていない端末は最初からになります）
+` +
+        `・あとでまた「${labelOf(currentDataset)}」に戻すこともできます`
+    );
+    if (!ok) return;
+    setIsSwitching(true);
+    try {
+      await setRecordingDataset(n);
+      setCurrentDataset(n);
+      alert(`記録するデータを「${labelOf(n)}」に切り替えました。`);
+    } catch (e) {
+      console.error('データ切り替えエラー:', e);
+      alert('切り替えに失敗しました。管理者アカウントでログインしているか確認してください。');
+    } finally {
+      setIsSwitching(false);
+    }
+  };
   const handleSaveName = async () => {
     if (selectedDataset === null || nameDraft === null || currentDataset === null) return;
     const clean = nameDraft.trim().slice(0, DATASET_NAME_MAX);
@@ -742,7 +770,7 @@ export const ResearchDataPanel: React.FC = () => {
               </span>
             </p>
             <p className="text-[10px] text-neutral-500 mt-1 leading-relaxed">
-              次のデータを開始すると、以降の記録は新しい番号で保存され、参加者の端末の進み具合（レベル・EXP・クエスト・学習履歴）は次に開いたときに初期化されます。前のデータは消えません。
+              次のデータを開始すると、以降の記録は新しい番号で保存され、参加者の端末の進み具合（レベル・EXP・クエスト・学習履歴）は次に開いたときに初期化されます。前のデータは消えません。下でデータを選ぶと、そのデータの記録に戻すこともできます。
             </p>
           </div>
           <button
@@ -751,7 +779,11 @@ export const ResearchDataPanel: React.FC = () => {
             className="px-3 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-xl transition text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
           >
             <FolderPlus size={14} />
-            {isStartingNext ? '切り替え中...' : currentDataset === null ? '次のデータを開始' : `データ${currentDataset + 1} を開始`}
+            {isStartingNext
+              ? '切り替え中...'
+              : currentDataset === null
+                ? '次のデータを開始'
+                : `データ${(datasetOptions[datasetOptions.length - 1] ?? currentDataset) + 1} を開始`}
           </button>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -780,6 +812,17 @@ export const ResearchDataPanel: React.FC = () => {
             すべて
           </button>
         </div>
+        {/* 記録中でないデータを選んでいるときは、そのデータの記録に戻せる */}
+        {selectedDataset !== null && currentDataset !== null && selectedDataset !== currentDataset && (
+          <button
+            onClick={() => void handleSwitchTo(selectedDataset)}
+            disabled={isSwitching}
+            className="w-full sm:w-auto px-3 py-2 rounded-xl border border-amber-500/60 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            <RotateCcw size={14} />
+            {isSwitching ? '切り替え中...' : `「${labelOf(selectedDataset)}」の記録に戻す（いま記録中：${labelOf(currentDataset)}）`}
+          </button>
+        )}
         {/* 名前の変更（データを1つ選んでいるとき） */}
         {selectedDataset !== null && (
           nameDraft === null ? (

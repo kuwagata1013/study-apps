@@ -1,6 +1,8 @@
 // 記録期間（データ1・データ2 …）の管理
-// 管理者が「次のデータを開始」すると Firestore settings/dataset の番号が上がる。
-// 参加者の端末は次にアプリを開いたとき、それに追いついて進み具合（レベル・履歴など）を初期化する。
+// 管理者が「次のデータを開始」または「このデータに戻す」と Firestore settings/dataset の番号が変わる。
+// 参加者の端末は次にアプリを開いたとき、それに合わせて進み具合（レベル・履歴など）を切り替える。
+// - 今のデータの進み具合は端末にしまっておき（dataset_stash_N）、
+// - 切り替え先のデータの進み具合がしまってあれば戻す（なければ最初から）。
 // 以降の学習ログ・行動データには新しい番号が付くので、前のデータは消えずに区別できる。
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -30,13 +32,42 @@ const setLocalDataset = (n: number) => {
   }
 };
 
-const wipeLocalProgress = () => {
+const STASH_PREFIX = 'dataset_stash_';
+const isProgressKey = (k: string) => WIPE_KEYS.includes(k) || WIPE_PREFIXES.some((p) => k.startsWith(p));
+
+// 今の進み具合を、データ番号ごとにしまってから消す
+const stashAndWipeLocalProgress = (dataset: number) => {
   try {
-    Object.keys(localStorage)
-      .filter((k) => WIPE_KEYS.includes(k) || WIPE_PREFIXES.some((p) => k.startsWith(p)))
-      .forEach((k) => localStorage.removeItem(k));
+    const keys = Object.keys(localStorage).filter(isProgressKey);
+    const saved: Record<string, string> = {};
+    keys.forEach((k) => {
+      const v = localStorage.getItem(k);
+      if (v !== null) saved[k] = v;
+    });
+    try {
+      localStorage.setItem(STASH_PREFIX + dataset, JSON.stringify(saved));
+    } catch (e) {
+      console.warn('進み具合をしまえませんでした（容量不足など）:', e);
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
   } catch {
     // 無視
+  }
+};
+
+// しまってあった進み具合を戻す（戻したら true）
+const restoreLocalProgress = (dataset: number): boolean => {
+  try {
+    const raw = localStorage.getItem(STASH_PREFIX + dataset);
+    if (!raw) return false;
+    const saved = JSON.parse(raw) as Record<string, unknown>;
+    Object.entries(saved).forEach(([k, v]) => {
+      if (isProgressKey(k) && typeof v === 'string') localStorage.setItem(k, v);
+    });
+    localStorage.removeItem(STASH_PREFIX + dataset);
+    return true;
+  } catch {
+    return false;
   }
 };
 
@@ -63,9 +94,9 @@ export const fetchDatasetInfo = async (): Promise<DatasetInfo> => {
 export const DATASET_NAME_MAX = 40;
 export const datasetLabel = (n: number, names: Record<string, string> = {}) => names[String(n)] || `データ${n}`;
 
-// 管理者用：次のデータを開始する（付けた名前は残す）
-export const startNextDataset = async (next: number) => {
-  await setDoc(doc(db, ...SETTINGS_PATH), { current: next, updatedAt: serverTimestamp() }, { merge: true });
+// 管理者用：記録するデータを切り替える（次のデータの開始にも、前のデータに戻すのにも使う。付けた名前は残す）
+export const setRecordingDataset = async (n: number) => {
+  await setDoc(doc(db, ...SETTINGS_PATH), { current: n, updatedAt: serverTimestamp() }, { merge: true });
 };
 
 // 管理者用：データの名前を変える（空にすると「データN」に戻る）。
@@ -79,9 +110,16 @@ export const renameDataset = async (n: number, name: string, current: number) =>
   );
 };
 
+export interface DatasetChange {
+  from: number;
+  to: number;
+  // 切り替え先の進み具合を端末から戻せたか（false なら最初から）
+  restored: boolean;
+}
+
 // アプリ起動時、画面を出す前に 1 回だけ呼ぶ。
-// 新しいデータが始まっていれば端末の進み具合を初期化し、その番号を返す（変化なしなら null）
-export const syncDataset = async (): Promise<number | null> => {
+// データが切り替わっていれば端末の進み具合を切り替え、その内容を返す（変化なしなら null）
+export const syncDataset = async (): Promise<DatasetChange | null> => {
   let current: number;
   try {
     current = await Promise.race([
@@ -95,7 +133,8 @@ export const syncDataset = async (): Promise<number | null> => {
   }
   const local = getLocalDataset();
   if (current === local) return null;
-  if (current > local) wipeLocalProgress();
+  stashAndWipeLocalProgress(local);
+  const restored = restoreLocalProgress(current);
   setLocalDataset(current);
-  return current > local ? current : null;
+  return { from: local, to: current, restored };
 };
