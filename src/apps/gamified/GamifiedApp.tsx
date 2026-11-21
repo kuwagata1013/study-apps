@@ -35,6 +35,7 @@ import {
   FOCUS_BONUS_EXP,
   FOCUS_BONUS_SECONDS,
   dayKey,
+  logTime,
   missedDays,
   streakBonusRate,
   streakUntilYesterday,
@@ -50,7 +51,7 @@ import { useBgm } from '../../lib/useBgm';
 import walkSheetUrl from '../../assets/character/walk_sheet.png';
 import sitUrl from '../../assets/character/sit.png';
 import { BGM_TRACKS, bgmName, type BgmTrack } from './bgmTracks';
-import Equalizer from './Equalizer';
+import Equalizer from '../../components/Equalizer';
 
 // 歩行アニメーション：1枚の画像（src/assets/character/walk_sheet.png、624 × 864 px、4列 × 3段）に
 // 並んだ12コマで1周（左右1歩ずつ）。表示するコマの部分だけを映す
@@ -494,6 +495,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 今日の連続ボーナスと、集中ボーナスまでの残り
   const streakDays = studyStreak(logs, protectedDays);
 
+  // 今日の勉強時間（分）。フレンドに見せる
+  const todayStudyKey = dayKey(new Date());
+  const todayMinutes = logs
+    .filter((l) => dayKey(logTime(l)) === todayStudyKey)
+    .reduce((sum, l) => sum + l.durationMinutes, 0);
+
   // プレイヤー名（ログイン後に決めた名前。Google アカウントの名前は使わない）
   const shownName = playerName || (user ? '冒険者' : 'ゲスト冒険者');
 
@@ -503,12 +510,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   useEffect(() => {
     if (!uid || !playerName) return;
     const t = setTimeout(() => {
-      savePlayerStats(uid, { level, title: levelTitle(level), streakDays }).catch((e) =>
+      savePlayerStats(uid, { level, title: levelTitle(level), streakDays, todayMinutes, todayKey: dayKey(new Date()) }).catch((e) =>
         console.error('プロフィールの保存に失敗:', e)
       );
     }, 1500);
     return () => clearTimeout(t);
-  }, [uid, playerName, level, streakDays]);
+  }, [uid, playerName, level, streakDays, todayMinutes]);
   const bonusPercent = Math.round(streakBonusRate(streakUntilYesterday(logs, protectedDays)) * 100);
   const focusAchieved = Math.max(bestRun, runSeconds) >= FOCUS_BONUS_SECONDS;
 

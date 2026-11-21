@@ -15,6 +15,8 @@ export interface PlayerProfile {
   level: number;
   title: string;
   streakDays: number;
+  todayMinutes: number; // その日の勉強時間（分）
+  todayKey: string; // todayMinutes の日付（YYYY-MM-DD）。今日と違えば 0 分として扱う
 }
 
 export const normalizeName = (name: string) => name.replace(/\s+/g, ' ').trim().slice(0, MAX_NAME_LENGTH);
@@ -79,13 +81,18 @@ export const claimPlayerName = async (uid: string, rawName: string, oldName?: st
 };
 
 // 自分の公開プロフィールのうち、レベル・称号・連続日数を更新する（名前は claimPlayerName で変える）
-export const savePlayerStats = async (uid: string, s: { level: number; title: string; streakDays: number }) => {
+export const savePlayerStats = async (
+  uid: string,
+  s: { level: number; title: string; streakDays: number; todayMinutes: number; todayKey: string }
+) => {
   await setDoc(
     doc(db, 'players', uid),
     {
       level: Math.max(1, Math.min(100, Math.floor(s.level))),
       title: s.title.slice(0, 40),
       streakDays: Math.max(0, Math.floor(s.streakDays)),
+      todayMinutes: Math.max(0, Math.min(1440, Math.round(s.todayMinutes))),
+      todayKey: s.todayKey,
       updatedAt: serverTimestamp()
     },
     { merge: true }
@@ -101,7 +108,9 @@ export const fetchPlayer = async (uid: string): Promise<PlayerProfile | null> =>
     name: d.name || '冒険者',
     level: d.level ?? 1,
     title: d.title ?? '',
-    streakDays: d.streakDays ?? 0
+    streakDays: d.streakDays ?? 0,
+    todayMinutes: d.todayMinutes ?? 0,
+    todayKey: d.todayKey ?? ''
   };
 };
 

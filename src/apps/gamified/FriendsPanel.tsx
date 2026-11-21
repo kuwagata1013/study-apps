@@ -1,6 +1,6 @@
 // ゲーム版のフレンド機能（フレンドタブの中身・アカウントIDのコピー・プレイヤー名の変更）
 import React, { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, Flame, Pencil, RefreshCw, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { BookOpen, Check, Copy, Flame, Pencil, RefreshCw, Trash2, UserPlus, Users, X } from 'lucide-react';
 import {
   addFriend,
   fetchFriends,
@@ -11,6 +11,10 @@ import {
   type AddFriendResult,
   type PlayerProfile
 } from '../../lib/players';
+import { dayKey, formatMinutes } from './gameStatsUtils';
+
+// 今日の勉強時間（相手の記録が今日のものでなければ 0 分）
+const todayMinutesOf = (f: PlayerProfile) => (f.todayKey === dayKey(new Date()) ? f.todayMinutes : 0);
 
 // クリップボードにコピー（使えない環境では選択してコピーする方法に切り替える）
 const copyText = async (text: string) => {
@@ -152,7 +156,8 @@ export const FriendsPanel: React.FC<{ uid: string | null }> = ({ uid }) => {
     if (!uid) return;
     setLoading(true);
     try {
-      setFriends(await fetchFriends(uid));
+      // 今日たくさん勉強した人が上
+      setFriends((await fetchFriends(uid)).sort((a, b) => todayMinutesOf(b) - todayMinutesOf(a)));
     } catch (e) {
       console.error('フレンドの読み込みに失敗:', e);
       setMessage({ ok: false, text: 'フレンドを読み込めませんでした。通信状態を確認してください' });
@@ -251,7 +256,7 @@ export const FriendsPanel: React.FC<{ uid: string | null }> = ({ uid }) => {
 
           <div className="space-y-2">
             <p className="text-[11px] font-bold text-white/70">
-              フレンド一覧（{friends.length}人）
+              フレンド一覧（{friends.length}人・今日の勉強時間が長い順）
             </p>
             {friends.length === 0 ? (
               <p className="text-xs text-white/45 py-3 text-center">{loading ? '読み込み中…' : 'フレンドはまだいません'}</p>
@@ -266,9 +271,17 @@ export const FriendsPanel: React.FC<{ uid: string | null }> = ({ uid }) => {
                     <p className="text-sm font-bold text-white truncate">{f.name}</p>
                     <p className="text-[11px] text-[#fdd69f]/80 truncate">{f.title}</p>
                   </div>
-                  <span className="shrink-0 flex items-center gap-0.5 text-xs font-bold text-[#fdd69f]">
-                    <Flame size={13} /> {f.streakDays}日
-                  </span>
+                  <div className="shrink-0 flex flex-col items-end gap-0.5">
+                    <span
+                      className={`flex items-center gap-1 text-xs font-bold ${todayMinutesOf(f) > 0 ? 'text-white' : 'text-white/40'}`}
+                      title="今日の勉強時間"
+                    >
+                      <BookOpen size={12} className="text-[#fdd69f]" /> 今日 {formatMinutes(todayMinutesOf(f))}
+                    </span>
+                    <span className="flex items-center gap-0.5 text-[11px] font-bold text-[#fdd69f]" title="連続日数">
+                      <Flame size={12} /> {f.streakDays}日連続
+                    </span>
+                  </div>
                   <button onClick={() => void onRemove(f)} className="shrink-0 p-1 text-white/40 hover:text-red-400" aria-label="フレンドから外す">
                     <Trash2 size={15} />
                   </button>
