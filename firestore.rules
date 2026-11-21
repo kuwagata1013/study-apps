@@ -117,24 +117,27 @@ service cloud.firestore {
     match /players/{uid} {
       allow get: if request.auth != null;
       allow list: if false;
-      allow create, update: if request.auth != null && request.auth.uid == uid
+      // 管理者はパスワードの再発行（新しいアカウントへの引き継ぎ）とアカウントの削除のときに書く
+      allow create, update: if ((request.auth != null && request.auth.uid == uid) || isAdmin())
         && isValidPlayer(request.resource.data);
-      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow delete: if (request.auth != null && request.auth.uid == uid) || isAdmin();
 
       // 自分のフレンド一覧（相手のアカウントIDをドキュメントIDにする）。読めるのは本人だけ
       // フレンドになるのは申請を承認したときだけ。承認した人が、自分の一覧と申請した人の一覧の両方に書く
       // 外すときはどちらからでも両方の一覧から消せる
       match /friends/{friendId} {
-        allow read: if request.auth != null && request.auth.uid == uid;
-        allow delete: if request.auth != null && (request.auth.uid == uid || request.auth.uid == friendId);
+        allow read: if (request.auth != null && request.auth.uid == uid) || isAdmin();
+        allow delete: if (request.auth != null && (request.auth.uid == uid || request.auth.uid == friendId)) || isAdmin();
         allow update: if false;
         allow create: if request.auth != null
           && friendId != uid
           && request.resource.data.keys().hasOnly(['addedAt'])
           && request.resource.data.addedAt == request.time
           && (
+            // 管理者がパスワードの再発行で新しいアカウントへ引き継ぐ
+            isAdmin()
             // 承認する人が、申請してきた人を自分の一覧に入れる
-            (request.auth.uid == uid
+            || (request.auth.uid == uid
               && exists(/databases/$(database)/documents/friendRequests/$(friendId + '_' + uid)))
             // 承認する人が、申請してきた人の一覧に自分を入れる
             || (request.auth.uid == friendId
@@ -159,16 +162,40 @@ service cloud.firestore {
 
     // プレイヤー名の登録（名前 → アカウントID）。名前は早い者勝ちで1人のもの
     // ログインした人が名前を指定して1件ずつ引ける（一覧はできない）。登録・解除は本人だけ。書き換えは不可
+    // 管理者はパスワードの再発行で新しいアカウントに付け替え、アカウントの削除で外す
     match /playerNames/{key} {
       allow get: if request.auth != null;
-      allow list, update: if false;
-      allow create: if request.auth != null
+      allow list: if false;
+      allow create, update: if request.auth != null
+        && ((request.resource.data.uid == request.auth.uid && resource == null) || isAdmin())
         && request.resource.data.keys().hasOnly(['uid', 'name', 'updatedAt'])
-        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.uid is string
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 20
         && request.resource.data.updatedAt == request.time;
-      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow delete: if (request.auth != null && resource.data.uid == request.auth.uid) || isAdmin();
+    }
+
+    // 発行済みの参加者ID（ドキュメントIDは小文字の参加者ID）。ここにないIDはアカウントに登録できない
+    // gen はパスワードを再発行するたびに増える世代、deleted は管理者が削除したIDの印
+    // ログイン前に確認するので1件ずつは誰でも読める。一覧と書き込みは管理者だけ
+    match /issuedIds/{key} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['participantId', 'gen', 'deleted', 'updatedAt'])
+        && request.resource.data.participantId is string
+        && request.resource.data.participantId.matches('^[A-Za-z0-9_-]{1,32}$')
+        && request.resource.data.participantId.lower() == key
+        && request.resource.data.gen is int && request.resource.data.gen >= 1 && request.resource.data.gen <= 1000
+        && request.resource.data.deleted is bool
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    function isIssued(pid) {
+      return exists(/databases/$(database)/documents/issuedIds/$(pid.lower()))
+        && get(/databases/$(database)/documents/issuedIds/$(pid.lower())).data.deleted == false;
     }
 
     // アカウントに結び付けた研究参加者ID。読めるのは本人と管理者だけ
@@ -180,11 +207,13 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['participantId', 'createdAt'])
         && request.resource.data.participantId is string
         && request.resource.data.participantId.matches('^[A-Za-z0-9_-]{1,32}$')
+        && isIssued(request.resource.data.participantId)
         && request.resource.data.createdAt == request.time;
       allow update: if isAdmin()
         && request.resource.data.keys().hasOnly(['participantId', 'createdAt', 'updatedAt'])
         && request.resource.data.participantId is string
         && request.resource.data.participantId.matches('^[A-Za-z0-9_-]{1,32}$')
+        && isIssued(request.resource.data.participantId)
         && request.resource.data.updatedAt == request.time;
       allow delete: if isAdmin();
     }
@@ -192,8 +221,8 @@ service cloud.firestore {
     // フレンド申請（ドキュメントIDは「申請した人のID_相手のID」）
     // 読めるのは申請した人と相手だけ。承認・拒否・取り消しで消す。書き換えは不可
     match /friendRequests/{requestId} {
-      allow read, delete: if request.auth != null
-        && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+      allow read, delete: if isAdmin() || (request.auth != null
+        && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid));
       allow update: if false;
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['from', 'to', 'createdAt'])

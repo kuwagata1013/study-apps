@@ -377,11 +377,11 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 pb-24 antialiased">
       
-      <main className="max-w-md mx-auto p-4 space-y-6 pt-4">
+      <main className="max-w-md md:max-w-5xl mx-auto p-4 md:px-6 space-y-6 pt-4">
 
         {/* ===== TAB 1: タイマー ===== */}
         {activeTab === 'timer' && (
-          <div className="space-y-6">
+          <div className="space-y-6 md:max-w-2xl md:mx-auto">
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 text-center space-y-4">
               
               {/* 加算 vs 減算 切替 */}
@@ -455,8 +455,8 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
               </div>
 
               {/* タイマー表示 */}
-              <div className="py-8 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col items-center justify-center">
-                <span className="text-6xl font-extrabold tracking-tight text-gray-900 font-mono">
+              <div className="py-8 md:py-12 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col items-center justify-center">
+                <span className="text-6xl md:text-8xl font-extrabold tracking-tight text-gray-900 font-mono">
                   {formatTime(seconds)}
                 </span>
                 <p className="text-xs text-gray-400 mt-2 font-medium">
@@ -519,7 +519,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
         {/* ===== TAB 2: ToDo ===== */}
         {activeTab === 'todo' && (
-          <div className="space-y-4">
+          <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 md:items-start">
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
               <h2 className="text-base font-bold text-gray-900 flex items-center justify-between">
                 <span className="flex items-center gap-2"><CheckSquare size={18} /> 学習タスク & 期限管理</span>
@@ -612,7 +612,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
         {/* ===== TAB 3: カレンダー ===== */}
         {activeTab === 'calendar' && (
-          <div className="space-y-4">
+          <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 md:items-start">
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 space-y-3">
               <div className="flex justify-between items-center px-1">
                 <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
@@ -720,8 +720,8 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
         {/* ===== TAB 4: 詳細統計 ===== */}
         {activeTab === 'stats' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex justify-between items-center">
+          <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 md:items-start">
+            <div className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex justify-between items-center md:col-span-2">
               <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
                 <BarChart2 size={16} /> 集計期間
               </span>
@@ -761,7 +761,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
                 全学習ログ履歴
               </h3>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-60 md:max-h-[32rem] overflow-y-auto">
                 {logs.length === 0 ? (
                   <p className="text-xs text-gray-400 text-center py-4">履歴データがありません</p>
                 ) : (
@@ -790,7 +790,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
         {/* ===== TAB 5: マイページ ===== */}
         {activeTab === 'profile' && (
-          <div className="space-y-4">
+          <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 md:items-start">
             
             {/* BGM環境音設定 */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4" style={{ ['--eq-color' as string]: '#111827' }}>
@@ -911,7 +911,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
       {/* 下部5タブバー */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 py-2 px-4 z-30">
-        <div className="max-w-md mx-auto flex items-stretch [&>button+button]:border-l [&>button+button]:border-gray-200">
+        <div className="max-w-md md:max-w-2xl mx-auto flex items-stretch [&>button+button]:border-l [&>button+button]:border-gray-200">
           <button
             onClick={() => setActiveTab('timer')}
             className={`flex-1 min-w-0 flex flex-col items-center gap-1 transition whitespace-nowrap ${activeTab === 'timer' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}

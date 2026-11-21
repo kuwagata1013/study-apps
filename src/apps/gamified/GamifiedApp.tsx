@@ -316,7 +316,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
         fire(0.2);
         fire(0.8);
         setTimeout(() => fire(0.5), 400);
-        alert(`👑 Lv.${LEGEND_LEVEL} 到達！ 称号「${levelTitle(LEGEND_LEVEL)}」を手に入れました！\nここまで続けたあなたは本物の伝説です。この先もレベルは上がり続けます。`);
+        alert(`👑 Lv.${LEGEND_LEVEL} 到達！ 称号「${levelTitle(LEGEND_LEVEL)}」を手に入れました！\nここまで続けたあなたは本物の伝説です。この先にもさらに上の称号が待っています。`);
       } else {
         confetti({ particleCount: newTitle ? 200 : 120, spread: newTitle ? 100 : 80, origin: { y: 0.6 } });
         alert(

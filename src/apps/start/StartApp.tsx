@@ -10,10 +10,11 @@ import {
   PARTICIPANT_ID_MAX
 } from '../../lib/participant';
 import { claimPlayerName, MAX_NAME_LENGTH, normalizeName } from '../../lib/players';
-import { loginWithParticipantId, participantIdFromEmail, type LoginError } from '../../lib/participantAuth';
+import { getIssuedId, loginWithParticipantId, participantIdFromEmail, type LoginError } from '../../lib/participantAuth';
 
 const LOGIN_ERROR_TEXT: Record<LoginError, string> = {
   wrong: '参加者IDかパスワードがちがいます',
+  deleted: 'この参加者IDは使えなくなりました。先生（管理者）に確認してください',
   too_many: '何度もまちがえたため、しばらくログインできません。少し待ってからお試しください',
   disabled: 'このアカウントは使えません。先生（管理者）に確認してください',
   network: '通信できませんでした。インターネットにつながっているか確認してください',
@@ -38,6 +39,8 @@ interface StartAppProps {
   lockedParticipantId?: string; // アカウントに登録済みの参加者ID（変更できない）
   participantChecking?: boolean; // アカウントの参加者IDを確認中
   onOpenAdmin?: () => void;
+  loginNotice?: string; // 使えないアカウントだったのでログアウトさせたときの案内
+  onClearLoginNotice?: () => void;
 }
 
 export const StartApp: React.FC<StartAppProps> = ({
@@ -48,7 +51,9 @@ export const StartApp: React.FC<StartAppProps> = ({
   onNameSaved,
   lockedParticipantId = '',
   participantChecking = false,
-  onOpenAdmin
+  onOpenAdmin,
+  loginNotice = '',
+  onClearLoginNotice
 }) => {
   const [loading, setLoading] = useState(false);
   const adminEntry = isAdminEntry();
@@ -63,6 +68,7 @@ export const StartApp: React.FC<StartAppProps> = ({
     if (!id || !loginPassword || loading) return;
     setLoading(true);
     setLoginError('');
+    onClearLoginNotice?.();
     const err = await loginWithParticipantId(id, loginPassword);
     setLoading(false);
     if (err) setLoginError(LOGIN_ERROR_TEXT[err]);
@@ -137,7 +143,8 @@ export const StartApp: React.FC<StartAppProps> = ({
   const isParticipantValid = isValidParticipantId(participantId);
 
   // 参加者IDを確認・保存してからモードを開始
-  const handleSelectMode = (mode: 'simple' | 'gamified') => {
+  const [pidVerifying, setPidVerifying] = useState(false);
+  const handleSelectMode = async (mode: 'simple' | 'gamified') => {
     setModeError('');
     if (!user) {
       setModeError('先に STEP 1 で、配られた参加者IDとパスワードでログインしてください');
@@ -157,6 +164,24 @@ export const StartApp: React.FC<StartAppProps> = ({
       if (showPidStep) setParticipantError('参加者IDを入力してください（半角英数字・ハイフン・アンダースコア、32文字まで）');
       else setModeError('参加者IDを確認できませんでした。通信状態を確認して、ログインし直してください');
       return;
+    }
+    // 自分で入力した参加者IDは、管理者が発行したものだけ使える
+    if (showPidStep) {
+      if (pidVerifying) return;
+      setPidVerifying(true);
+      try {
+        const issued = await getIssuedId(participantId);
+        if (!issued || issued.deleted) {
+          setParticipantError('この参加者IDは発行されていません。発行済みの参加者IDを入力してください');
+          return;
+        }
+      } catch (err) {
+        console.error('参加者IDの確認に失敗:', err);
+        setModeError('参加者IDを確認できませんでした。通信状態を確認して、もう一度お試しください');
+        return;
+      } finally {
+        setPidVerifying(false);
+      }
     }
     saveParticipantId(participantId);
     onSelectMode(mode);
@@ -288,7 +313,7 @@ export const StartApp: React.FC<StartAppProps> = ({
                   className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 font-mono"
                 />
               </label>
-              {loginError && <p className="text-[11px] text-red-500 font-bold">{loginError}</p>}
+              {(loginError || loginNotice) && <p className="text-[11px] text-red-500 font-bold">{loginError || loginNotice}</p>}
               <button
                 type="submit"
                 disabled={loading || !loginId.trim() || !loginPassword}
@@ -297,7 +322,6 @@ export const StartApp: React.FC<StartAppProps> = ({
                 <LogIn size={18} />
                 {loading ? 'ログイン中...' : 'ログイン'}
               </button>
-              <p className="text-[10px] text-gray-400 text-center">パスワードを忘れたときは、先生（管理者）に聞いてください</p>
             </form>
           )}
         </div>
@@ -319,7 +343,6 @@ export const StartApp: React.FC<StartAppProps> = ({
                 <div className="px-3 py-2.5 text-sm border border-dashed border-gray-300 rounded-xl bg-gray-50 text-gray-400">
                   ログインすると決められます
                 </div>
-                <p className="text-[10px] text-gray-400">フレンドに見せる名前です。本名ではなくニックネームがおすすめです</p>
               </div>
             ) : nameStatus === 'checking' ? (
               <p className="text-xs text-gray-400 text-center py-2">確認中...</p>
@@ -417,11 +440,10 @@ export const StartApp: React.FC<StartAppProps> = ({
               STEP {modeStep}: モードを選択して開始
             </span>
           </div>
-          {!user && <p className="text-[11px] text-gray-400 text-center">ログインして名前を決めると選べます</p>}
 
           <div className="space-y-3">
             <button
-              onClick={() => handleSelectMode('simple')}
+              onClick={() => void handleSelectMode('simple')}
               className="w-full p-4 bg-gray-50 hover:bg-blue-50/50 border border-gray-200 hover:border-blue-200 rounded-2xl transition flex items-center justify-between group text-left"
             >
               <div className="flex items-center gap-3.5">
@@ -441,7 +463,7 @@ export const StartApp: React.FC<StartAppProps> = ({
             </button>
 
             <button
-              onClick={() => handleSelectMode('gamified')}
+              onClick={() => void handleSelectMode('gamified')}
               className="w-full p-4 bg-purple-50/50 hover:bg-purple-100/50 border border-purple-100 hover:border-purple-300 rounded-2xl transition flex items-center justify-between group text-left"
             >
               <div className="flex items-center gap-3.5">

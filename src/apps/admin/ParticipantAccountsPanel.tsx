@@ -1,15 +1,30 @@
 // 管理者用：参加者ID・プレイヤー名・アカウントIDの対応表
 // 参加者IDはアカウントに1つだけ登録され、本人は変更できない。付け替えはここから行う
+// アカウントの削除とパスワードの再発行もここから行う
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Pencil, RefreshCw, Users } from 'lucide-react';
+import { AlertTriangle, Download, KeyRound, Pencil, RefreshCw, Trash2, Users } from 'lucide-react';
 import { adminSetParticipantId, fetchParticipantAccounts, type ParticipantAccount } from '../../lib/accounts';
 import { fetchPlayer } from '../../lib/players';
 import { fetchAdminUids } from '../../lib/admins';
 import { isValidParticipantId, normalizeParticipantId } from '../../lib/participant';
+import {
+  backfillIssuedIds,
+  deleteParticipantAccount,
+  fetchIssuedIds,
+  getIssuedId,
+  resetParticipantPassword
+} from '../../lib/participantAuth';
 
 interface Row extends ParticipantAccount {
   name: string;
   isAdmin: boolean;
+  issued: boolean; // 発行済みの台帳に載っている
+}
+
+interface ResetResult {
+  participantId: string;
+  password: string;
+  message?: string;
 }
 
 const dateText = (d: Date | null) =>
@@ -32,17 +47,32 @@ export const ParticipantAccountsPanel: React.FC = () => {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [busyUid, setBusyUid] = useState('');
+  const [resets, setResets] = useState<ResetResult[]>([]);
+  const [resetsSaved, setResetsSaved] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [accounts, adminUids] = await Promise.all([fetchParticipantAccounts(), fetchAdminUids().catch(() => [] as string[])]);
+      const [accounts, adminUids, issued] = await Promise.all([
+        fetchParticipantAccounts(),
+        fetchAdminUids().catch(() => [] as string[]),
+        fetchIssuedIds()
+      ]);
       const admins = new Set(adminUids);
+      // 台帳ができる前から使われている参加者IDを、発行済みとして台帳に載せる（管理者の Google アカウントは除く）
+      await backfillIssuedIds(
+        accounts.filter((a) => !admins.has(a.uid) && isValidParticipantId(a.participantId)).map((a) => a.participantId),
+        issued
+      ).catch((e) => console.error('発行済みIDの登録に失敗:', e));
       const names = await Promise.all(accounts.map((a) => fetchPlayer(a.uid).catch(() => null)));
       setRows(
         accounts
-          .map((a, i) => ({ ...a, name: names[i]?.name ?? '', isAdmin: admins.has(a.uid) }))
+          .map((a, i) => {
+            const st = issued.get(a.participantId.toLowerCase());
+            return { ...a, name: names[i]?.name ?? '', isAdmin: admins.has(a.uid), issued: !!st && !st.deleted };
+          })
           .sort((x, y) => x.participantId.localeCompare(y.participantId, 'ja', { numeric: true }))
       );
     } catch (e) {
@@ -74,12 +104,74 @@ export const ParticipantAccountsPanel: React.FC = () => {
     }
     if (pid === r.participantId) return;
     try {
+      const issued = await getIssuedId(pid);
+      if (!issued || issued.deleted) {
+        alert(`参加者ID「${pid}」は発行されていません。先に「参加者アカウントを発行」で発行してください`);
+        return;
+      }
       await adminSetParticipantId(r.uid, pid);
       setRows((list) => list.map((x) => (x.uid === r.uid ? { ...x, participantId: pid, updatedAt: new Date() } : x)));
     } catch (e) {
       console.error('参加者IDの変更に失敗:', e);
       alert('変更できませんでした');
     }
+  };
+
+  const onReset = async (r: Row) => {
+    if (busyUid) return;
+    if (
+      !confirm(
+        `参加者ID「${r.participantId}」（${r.name || '名前未設定'}）のパスワードを再発行します。\n\n` +
+          '・今のパスワードは使えなくなり、ログイン中の端末は次に開いたときにログアウトされます\n' +
+          '・プレイヤー名とフレンドは引き継がれます\n\nよろしいですか？'
+      )
+    )
+      return;
+    setBusyUid(r.uid);
+    try {
+      const result = await resetParticipantPassword(r.uid, r.participantId);
+      if (result.status !== 'created') {
+        alert(`再発行できませんでした：${result.message ?? ''}`);
+        return;
+      }
+      setResets((list) => [{ participantId: r.participantId, password: result.password, message: result.message }, ...list]);
+      setResetsSaved(false);
+      await load();
+    } finally {
+      setBusyUid('');
+    }
+  };
+
+  const onDelete = async (r: Row) => {
+    if (busyUid) return;
+    if (
+      !confirm(
+        `参加者ID「${r.participantId}」（${r.name || '名前未設定'}）のアカウントを削除します。\n\n` +
+          '・このIDではログインできなくなります\n' +
+          '・プレイヤー名とフレンドは消えます（学習ログなどの研究データは残ります）\n' +
+          '・同じIDは「参加者アカウントを発行」でもう一度発行できます\n\n元に戻せません。よろしいですか？'
+      )
+    )
+      return;
+    setBusyUid(r.uid);
+    try {
+      await deleteParticipantAccount(r.uid, r.participantId);
+      setRows((list) => list.filter((x) => x.uid !== r.uid));
+    } catch (e) {
+      console.error('アカウントの削除に失敗:', e);
+      alert('削除できませんでした（新しい Firestore のルールがデプロイされているか確認してください）');
+    } finally {
+      setBusyUid('');
+    }
+  };
+
+  const saveResetsCsv = () => {
+    downloadCsv(
+      `participant_passwords_reissued_${new Date().toISOString().slice(0, 10)}.csv`,
+      ['参加者ID', '新しいパスワード'],
+      resets.map((x) => [x.participantId, x.password])
+    );
+    setResetsSaved(true);
   };
 
   const exportCsv = () =>
@@ -117,6 +209,7 @@ export const ParticipantAccountsPanel: React.FC = () => {
       <p className="text-[11px] text-neutral-400 leading-relaxed">
         ログインして使った人の、参加者IDとプレイヤー名・アカウントIDの対応です。参加者IDは最初に使ったものがアカウントに登録され、本人は変更できません。
         ゲスト（未ログイン）で使った記録はここには出ません。
+        発行していない参加者IDはログイン・登録に使えません。パスワードを忘れた生徒は「パスワード再発行」で新しいパスワードを作れます。
       </p>
       {duplicated.size > 0 && (
         <p className="text-[11px] font-bold text-amber-300">
@@ -124,6 +217,31 @@ export const ParticipantAccountsPanel: React.FC = () => {
         </p>
       )}
       {error && <p className="text-[11px] font-bold text-red-400">{error}</p>}
+
+      {resets.length > 0 && (
+        <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+          <p className="flex items-start gap-1.5 text-[11px] font-bold text-amber-300">
+            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            再発行したパスワードはどこにも保存されていません。この画面を閉じる前に、生徒に伝えるか CSV を保存してください。
+          </p>
+          <ul className="space-y-1">
+            {resets.map((x, i) => (
+              <li key={`${x.participantId}-${i}`} className="text-xs text-white flex flex-wrap items-baseline gap-x-3">
+                <span className="font-mono font-bold">{x.participantId}</span>
+                <span className="font-mono text-sky-300 select-all">{x.password}</span>
+                {x.message && <span className="text-[10px] text-amber-200">{x.message}</span>}
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={saveResetsCsv}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold"
+          >
+            <Download size={14} /> 新しいパスワードを CSV で保存（{resets.length}件）
+          </button>
+          {resetsSaved && <p className="text-[11px] text-emerald-300">保存しました。CSV はほかの人に見られない場所で管理してください。</p>}
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-2xl border border-neutral-800">
         <table className="w-full text-xs">
@@ -148,6 +266,7 @@ export const ParticipantAccountsPanel: React.FC = () => {
                 <tr key={r.uid} className="border-t border-neutral-800">
                   <td className={`px-3 py-2 font-mono font-bold whitespace-nowrap ${duplicated.has(r.participantId) ? 'text-amber-300' : 'text-white'}`}>
                     {r.participantId}
+                    {!r.isAdmin && !r.issued && <span className="block text-[9px] font-bold text-red-400">未発行のID</span>}
                   </td>
                   <td className="px-3 py-2 text-neutral-200 whitespace-nowrap">
                     {r.name || <span className="text-neutral-500">（未設定）</span>}
@@ -161,12 +280,34 @@ export const ParticipantAccountsPanel: React.FC = () => {
                     {r.updatedAt && <span className="block text-[10px] text-sky-400">変更 {dateText(r.updatedAt)}</span>}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <button
-                      onClick={() => void onChange(r)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-neutral-700 text-neutral-300 text-[10px] font-bold hover:bg-neutral-800 whitespace-nowrap"
-                    >
-                      <Pencil size={11} /> 変更
-                    </button>
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        onClick={() => void onChange(r)}
+                        disabled={!!busyUid}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-neutral-700 text-neutral-300 text-[10px] font-bold hover:bg-neutral-800 whitespace-nowrap disabled:opacity-40"
+                      >
+                        <Pencil size={11} /> 変更
+                      </button>
+                      {!r.isAdmin && (
+                        <>
+                          <button
+                            onClick={() => void onReset(r)}
+                            disabled={!!busyUid || !r.issued}
+                            title={r.issued ? undefined : '発行していない参加者IDです'}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-sky-800 text-sky-300 text-[10px] font-bold hover:bg-sky-500/10 whitespace-nowrap disabled:opacity-40"
+                          >
+                            <KeyRound size={11} /> {busyUid === r.uid ? '処理中...' : 'パスワード再発行'}
+                          </button>
+                          <button
+                            onClick={() => void onDelete(r)}
+                            disabled={!!busyUid}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-red-900 text-red-400 text-[10px] font-bold hover:bg-red-500/10 whitespace-nowrap disabled:opacity-40"
+                          >
+                            <Trash2 size={11} /> 削除
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))

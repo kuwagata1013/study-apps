@@ -114,7 +114,7 @@ export const applyExp = (level: number, exp: number, gained: number) => {
   return { level: lv, exp: e };
 };
 
-// 称号：このレベルに達するともらえる
+// 称号：このレベルに達するともらえる（Lv100 の「伝説の冒険者」の先にも上位の称号がある）
 export const TITLES: { level: number; name: string }[] = [
   { level: 1, name: '見習い冒険者' },
   { level: 5, name: '駆け出しの冒険者' },
@@ -125,8 +125,18 @@ export const TITLES: { level: number; name: string }[] = [
   { level: 60, name: '勇者' },
   { level: 75, name: '賢者' },
   { level: 90, name: '大賢者' },
-  { level: 100, name: '伝説の冒険者' }
+  { level: 100, name: '伝説の冒険者' },
+  { level: 120, name: '伝説の英雄' },
+  { level: 150, name: '英雄王' },
+  { level: 200, name: '神話の勇者' },
+  { level: 250, name: '星詠みの大賢者' },
+  { level: 300, name: '天空の覇者' },
+  { level: 400, name: '時を越えし者' },
+  { level: 500, name: '永遠の伝説' }
 ];
+
+// いちばん上の称号
+export const FINAL_TITLE = TITLES[TITLES.length - 1];
 
 export const levelTitle = (level: number) =>
   [...TITLES].reverse().find((t) => level >= t.level)?.name ?? TITLES[0].name;

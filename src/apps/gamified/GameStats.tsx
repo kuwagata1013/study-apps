@@ -6,7 +6,7 @@ import {
   CRYSTAL_STREAK_STEP,
   EXP_PER_MINUTE,
   LEGEND_LEVEL,
-  TITLES,
+  FINAL_TITLE,
   nextTitle,
   totalExpAt,
   WEEKDAYS,
@@ -134,9 +134,11 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
   const upcoming = nextTitle(level);
   const toNextTitleExp = upcoming ? totalExpAt(upcoming.level) - totalExpAt(level, exp) : 0;
   const toNextTitleMin = Math.ceil(toNextTitleExp / EXP_PER_MINUTE);
-  // Lv100（伝説の冒険者）までの進み具合。到達したら出さない
+  // Lv100（伝説の冒険者）までの進み具合。到達したら、いちばん上の称号までの進み具合を出す
   const isLegend = level >= LEGEND_LEVEL;
-  const journeyRatio = Math.min(100, (totalExpAt(level, exp) / totalExpAt(LEGEND_LEVEL)) * 100);
+  const isFinal = level >= FINAL_TITLE.level;
+  const goal = isLegend ? FINAL_TITLE : { level: LEGEND_LEVEL, name: levelTitle(LEGEND_LEVEL) };
+  const journeyRatio = Math.min(100, (totalExpAt(level, exp) / totalExpAt(goal.level)) * 100);
 
   return (
     <div className="space-y-4">
@@ -173,14 +175,17 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
               <span className="text-white/60">（学習 約{formatMinutes(toNextTitleMin)}）</span>
             </p>
           )}
-          {isLegend ? (
+          {isLegend && (
             <p className="text-[11px] text-yellow-300 font-bold">
-              👑 Lv.{LEGEND_LEVEL}「{TITLES[TITLES.length - 1].name}」到達！ レベルはこの先も上がり続けます
+              {isFinal
+                ? `👑 Lv.${FINAL_TITLE.level}「${FINAL_TITLE.name}」到達！ すべての称号を手に入れました。レベルはこの先も上がり続けます`
+                : `👑 Lv.${LEGEND_LEVEL}「${levelTitle(LEGEND_LEVEL)}」到達！ この先にもさらに上の称号が待っています`}
             </p>
-          ) : (
+          )}
+          {!isFinal && (
             <div>
               <div className="flex justify-between text-[10px] text-white/65">
-                <span>Lv.{LEGEND_LEVEL}「{TITLES[TITLES.length - 1].name}」への道のり</span>
+                <span>Lv.{goal.level}「{goal.name}」への道のり</span>
                 <span className="font-bold text-white">{journeyRatio.toFixed(1)}%</span>
               </div>
               <div className="mt-1 h-1.5 w-full bg-[#4a3424] rounded-full overflow-hidden">

@@ -14,7 +14,12 @@ import {
   loadAccountParticipantId,
   setParticipantOwner
 } from './lib/accounts';
-import { participantIdFromEmail, takePendingLoginId } from './lib/participantAuth';
+import {
+  checkParticipantLogin,
+  participantIdFromEmail,
+  takePendingLoginId,
+  type ParticipantLoginState
+} from './lib/participantAuth';
 import { setEventMode, setEventUser, startEventTracking } from './lib/researchEvents';
 import StartApp from './apps/start/StartApp';
 import GamifiedApp from './apps/gamified/GamifiedApp';
@@ -25,6 +30,13 @@ import { claimPlayerName, getCachedName, loadMyName } from './lib/players';
 import { Shield } from 'lucide-react';
 
 type AppMode = 'start' | 'simple' | 'gamified' | 'admin';
+
+// 使えない参加者アカウントでログインしたときに、スタート画面に出す文
+const BLOCKED_LOGIN_TEXT: Record<Exclude<ParticipantLoginState, 'ok'>, string> = {
+  not_issued: 'この参加者IDは発行されていません。先生（管理者）に確認してください',
+  deleted: 'この参加者IDは使えなくなりました。先生（管理者）に確認してください',
+  replaced: 'パスワードが新しくなりました。新しいパスワードでログインしてください'
+};
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -47,6 +59,8 @@ export const App: React.FC = () => {
   // none: 未ログイン / checking: 確認中 / locked: 登録済み / unset: まだ登録していない
   const [accountPid, setAccountPid] = useState('');
   const [pidStatus, setPidStatus] = useState<'none' | 'checking' | 'locked' | 'unset'>('none');
+  // 使えない参加者アカウントだったのでログアウトさせたときの案内
+  const [loginNotice, setLoginNotice] = useState('');
 
   // 管理者画面アクセス保護用
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
@@ -144,6 +158,15 @@ export const App: React.FC = () => {
     setPidStatus('checking');
     (async () => {
       try {
+        // 発行していない・削除した・パスワードを再発行した参加者アカウントは使わせない
+        const loginState = await checkParticipantLogin(uid, auth.currentUser?.email);
+        if (cancelled) return;
+        if (loginState !== 'ok') {
+          takePendingLoginId();
+          setLoginNotice(BLOCKED_LOGIN_TEXT[loginState]);
+          await signOut(auth).catch(() => undefined);
+          return;
+        }
         // 参加者ID＋パスワードでログインしたときに入力したID（大文字・小文字をそのまま使うため）
         const typed = takePendingLoginId();
         let pid = await loadAccountParticipantId(uid);
@@ -282,6 +305,8 @@ export const App: React.FC = () => {
           lockedParticipantId={pidStatus === 'locked' ? accountPid : ''}
           participantChecking={pidStatus === 'checking'}
           onOpenAdmin={openAdminAuth}
+          loginNotice={loginNotice}
+          onClearLoginNotice={() => setLoginNotice('')}
           onNameSaved={(name) => {
             setPlayerName(name);
             setNameStatus('ready');
