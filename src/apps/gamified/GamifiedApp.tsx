@@ -745,7 +745,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                       />
 
                       <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
-                        <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
                           <span className="text-[10px] text-white/65 font-bold shrink-0">教科:</span>
                           {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
                             <button
@@ -962,7 +962,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                         {uid && onRenamePlayer ? (
                           <PlayerNameEditor name={shownName} onSave={onRenamePlayer} />
                         ) : (
-                          <p className="font-bold text-white text-sm">{shownName}<span className="ml-2 text-[11px] font-normal text-white/45">ログインすると名前を決められます</span></p>
+                          <div>
+                            <p className="font-bold text-white text-sm">{shownName}</p>
+                            <p className="text-[11px] text-white/45">ログインすると名前を決められます</p>
+                          </div>
                         )}
                       </div>
                       <div className="flex justify-between">
@@ -1006,23 +1009,23 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       )}
 
       {/* モバイル用ボトムナビゲーション */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#312117]/90 backdrop-blur-md border-t border-[#fdd69f]/20 p-2 flex justify-around items-center z-30">
-        <button onClick={() => setActiveTab('timer')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'timer' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#312117]/90 backdrop-blur-md border-t border-[#fdd69f]/20 px-1 py-2 flex items-stretch z-30 [&>button+button]:border-l [&>button+button]:border-[#fdd69f]/20">
+        <button onClick={() => setActiveTab('timer')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'timer' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <Sparkles size={16} /> <span>冒険</span>
         </button>
-        <button onClick={() => setActiveTab('todo')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'todo' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
+        <button onClick={() => setActiveTab('todo')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'todo' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <CheckSquare size={16} /> <span>クエスト</span>
         </button>
-        <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'stats' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
+        <button onClick={() => setActiveTab('stats')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'stats' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <BarChart2 size={16} /> <span>戦績</span>
         </button>
-        <button onClick={() => setActiveTab('bgm')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'bgm' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
+        <button onClick={() => setActiveTab('bgm')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'bgm' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <Music size={16} /> <span>BGM</span>
         </button>
-        <button onClick={() => setActiveTab('friends')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'friends' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
+        <button onClick={() => setActiveTab('friends')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'friends' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <Users size={16} /> <span>フレンド</span>
         </button>
-        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'profile' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
+        <button onClick={() => setActiveTab('profile')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'profile' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <User size={16} /> <span>プロフィール</span>
         </button>
       </nav>

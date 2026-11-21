@@ -922,10 +922,10 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
       {/* 下部5タブバー */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 py-2 px-4 z-30">
-        <div className="max-w-md mx-auto flex justify-around items-center">
+        <div className="max-w-md mx-auto flex items-stretch [&>button+button]:border-l [&>button+button]:border-gray-200">
           <button
             onClick={() => setActiveTab('timer')}
-            className={`flex flex-col items-center gap-1 transition ${activeTab === 'timer' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
+            className={`flex-1 min-w-0 flex flex-col items-center gap-1 transition whitespace-nowrap ${activeTab === 'timer' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
           >
             <Clock size={20} />
             <span className="text-[10px]">タイマー</span>
@@ -933,7 +933,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
           <button
             onClick={() => setActiveTab('todo')}
-            className={`flex flex-col items-center gap-1 transition ${activeTab === 'todo' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
+            className={`flex-1 min-w-0 flex flex-col items-center gap-1 transition whitespace-nowrap ${activeTab === 'todo' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
           >
             <CheckSquare size={20} />
             <span className="text-[10px]">ToDo</span>
@@ -941,7 +941,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
           <button
             onClick={() => setActiveTab('calendar')}
-            className={`flex flex-col items-center gap-1 transition ${activeTab === 'calendar' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
+            className={`flex-1 min-w-0 flex flex-col items-center gap-1 transition whitespace-nowrap ${activeTab === 'calendar' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
           >
             <CalendarIcon size={20} />
             <span className="text-[10px]">カレンダー</span>
@@ -949,7 +949,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
           <button
             onClick={() => setActiveTab('stats')}
-            className={`flex flex-col items-center gap-1 transition ${activeTab === 'stats' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
+            className={`flex-1 min-w-0 flex flex-col items-center gap-1 transition whitespace-nowrap ${activeTab === 'stats' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
           >
             <BarChart2 size={20} />
             <span className="text-[10px]">詳細統計</span>
@@ -957,7 +957,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex flex-col items-center gap-1 transition ${activeTab === 'profile' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
+            className={`flex-1 min-w-0 flex flex-col items-center gap-1 transition whitespace-nowrap ${activeTab === 'profile' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
           >
             <Settings size={20} />
             <span className="text-[10px]">設定</span>
