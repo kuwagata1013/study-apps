@@ -155,15 +155,17 @@ export const App: React.FC = () => {
     }
   };
 
-  // ログインしていて名前がまだなら、先に名前を決めてもらう（管理者画面は除く）
-  if (user && mode !== 'admin' && nameStatus === 'checking') {
+  // ログインしていて名前がまだなら、先に名前を決めてもらう
+  // （スタート画面では「プレイヤー名」のステップで決める。管理者画面は除く）
+  const needsNameScreen = user && mode !== 'admin' && mode !== 'start';
+  if (needsNameScreen && nameStatus === 'checking') {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center text-xs text-gray-400">
         読み込み中...
       </div>
     );
   }
-  if (user && mode !== 'admin' && nameStatus === 'missing') {
+  if (needsNameScreen && nameStatus === 'missing') {
     return (
       <NameSetup
         uid={user.uid}
@@ -181,7 +183,16 @@ export const App: React.FC = () => {
     <div className="relative min-h-screen bg-gray-50">
       {/* メイン画面切替 */}
       {mode === 'start' && (
-        <StartApp onSelectMode={handleSelectMode} user={user} playerName={playerName} />
+        <StartApp
+          onSelectMode={handleSelectMode}
+          user={user}
+          playerName={playerName}
+          nameStatus={nameStatus}
+          onNameSaved={(name) => {
+            setPlayerName(name);
+            setNameStatus('ready');
+          }}
+        />
       )}
 
       {mode === 'simple' && (
