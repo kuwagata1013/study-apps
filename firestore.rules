@@ -90,7 +90,10 @@ service cloud.firestore {
       allow get: if true;
       allow list, delete: if false;
       allow create, update: if isAdmin()
-        && request.resource.data.keys().hasOnly(['current', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['current', 'updatedAt', 'names'])
+        // データの名前（{ '1': '予備実験', ... }）
+        && (!('names' in request.resource.data)
+          || (request.resource.data.names is map && request.resource.data.names.size() <= 1000))
         && request.resource.data.current is int
         && request.resource.data.current >= 1
         && request.resource.data.current <= 1000

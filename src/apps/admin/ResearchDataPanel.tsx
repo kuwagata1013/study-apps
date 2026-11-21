@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Activity, Database, Download, Flag, FolderPlus, ListChecks, MousePointerClick, Music, Power, RefreshCw, Timer, Users, Clock, X
+  Activity, Check, Database, Download, FileSpreadsheet, Flag, FolderPlus, ListChecks, MousePointerClick, Music, Pencil, Power,
+  RefreshCw, Timer, Users, Clock, X
 } from 'lucide-react';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { fetchCurrentDataset, startNextDataset } from '../../lib/dataset';
+import { DATASET_NAME_MAX, datasetLabel, fetchDatasetInfo, renameDataset, startNextDataset } from '../../lib/dataset';
+import { downloadXlsx, type Sheet } from '../../lib/xlsx';
 
 // ===== 型と変換 =====
 
@@ -239,6 +241,10 @@ export const ResearchDataPanel: React.FC = () => {
   const [currentDataset, setCurrentDataset] = useState<number | null>(null);
   const [datasetFilter, setDatasetFilter] = useState<string>('');
   const [isStartingNext, setIsStartingNext] = useState(false);
+  // データの名前（{ '1': '予備実験', ... }）と、名前の編集
+  const [datasetNames, setDatasetNames] = useState<Record<string, string>>({});
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [isSavingName, setIsSavingName] = useState(false);
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
 
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
@@ -253,11 +259,12 @@ export const ResearchDataPanel: React.FC = () => {
     const [logResult, eventResult, datasetResult] = await Promise.allSettled([
       getDocs(query(collection(db, 'researchLogs'), orderBy('createdAt', 'desc'))),
       getDocs(query(collection(db, 'researchEvents'), orderBy('createdAt', 'desc'))),
-      fetchCurrentDataset()
+      fetchDatasetInfo()
     ]);
     if (datasetResult.status === 'fulfilled') {
-      const current = datasetResult.value;
+      const { current, names } = datasetResult.value;
       setCurrentDataset(current);
+      setDatasetNames(names);
       // 最初は現在のデータを表示する
       setDatasetFilter((prev) => prev || String(current));
     }
@@ -405,7 +412,8 @@ export const ResearchDataPanel: React.FC = () => {
     return Array.from({ length: max }, (_, i) => i + 1);
   }, [currentDataset, logs, events]);
 
-  const datasetText = datasetFilter === 'all' || !datasetFilter ? '全データ' : `データ${datasetFilter}`;
+  const labelOf = (n: number) => datasetLabel(n, datasetNames);
+  const datasetText = datasetFilter === 'all' || !datasetFilter ? '全データ' : labelOf(Number(datasetFilter));
   const filePrefix = datasetFilter === 'all' || !datasetFilter ? 'all' : `data${datasetFilter}`;
 
   const handleStartNext = async () => {
@@ -415,12 +423,12 @@ export const ResearchDataPanel: React.FC = () => {
     }
     const next = currentDataset + 1;
     const ok = confirm(
-      `データ${next} の記録を開始しますか？
+      `${labelOf(next)} の記録を開始しますか？
 
 ` +
-        `・これ以降の学習ログと行動データは「データ${next}」として保存されます
+        `・これ以降の学習ログと行動データは「${labelOf(next)}」として保存されます
 ` +
-        `・データ${currentDataset} までの記録は消えず、この画面で切り替えて見られます
+        `・${labelOf(currentDataset)} までの記録は消えず、この画面で切り替えて見られます
 ` +
         `・参加者が次にアプリを開くと、端末のレベル・EXP・クエスト・学習履歴が初期化されます（参加者IDは残ります）
 
@@ -433,12 +441,35 @@ export const ResearchDataPanel: React.FC = () => {
       await startNextDataset(next);
       setCurrentDataset(next);
       setDatasetFilter(String(next));
-      alert(`データ${next} を開始しました。`);
+      alert(`${labelOf(next)} を開始しました。名前は「名前を変更」から付けられます。`);
     } catch (e) {
       console.error('データ切り替えエラー:', e);
       alert('切り替えに失敗しました。管理者アカウントでログインしているか確認してください。');
     } finally {
       setIsStartingNext(false);
+    }
+  };
+
+  // 表示中のデータの名前を変える
+  const selectedDataset = datasetFilter && datasetFilter !== 'all' ? Number(datasetFilter) : null;
+  const handleSaveName = async () => {
+    if (selectedDataset === null || nameDraft === null || currentDataset === null) return;
+    const clean = nameDraft.trim().slice(0, DATASET_NAME_MAX);
+    setIsSavingName(true);
+    try {
+      await renameDataset(selectedDataset, clean, currentDataset);
+      setDatasetNames((prev) => {
+        const next = { ...prev };
+        if (clean) next[String(selectedDataset)] = clean;
+        else delete next[String(selectedDataset)];
+        return next;
+      });
+      setNameDraft(null);
+    } catch (e) {
+      console.error('名前の変更エラー:', e);
+      alert('名前を変更できませんでした。管理者アカウントでログインしているか確認してください。');
+    } finally {
+      setIsSavingName(false);
     }
   };
 
@@ -452,84 +483,95 @@ export const ResearchDataPanel: React.FC = () => {
 
   const today = dateKey(new Date());
 
-  const exportLogsCsv = () => {
-    if (filtered.length === 0) {
-      alert('出力できるデータがありません');
-      return;
-    }
-    downloadCsv(
-      `research_logs_${filePrefix}_${today}.csv`,
-      [
-        'データ', 'ログID', '参加者ID', 'UID', '端末ID', 'モード', '教科', '学習時間(秒)', '学習時間(分)',
-        '開始日時', '終了日時', 'タイマー種別', 'レベル', '獲得EXP', 'メモ', 'ユーザーエージェント'
-      ],
-      filtered.map((l) => [
-        l.dataset, l.id, l.participantId, l.uid, l.deviceId, l.mode, l.subject, l.durationSeconds,
-        Math.round((l.durationSeconds / 60) * 10) / 10, dateTimeText(l.startedAt), dateTimeText(l.endedAt),
-        l.timerType, l.level ?? '', l.expGained ?? '', l.memo, l.userAgent
-      ])
-    );
-  };
+  // 出力する表（CSV と Excel で共通）
+  const logsTable = (): Sheet => ({
+    name: '学習記録',
+    headers: [
+      'データ', 'データ名', 'ログID', '参加者ID', 'UID', '端末ID', 'モード', '教科', '学習時間(秒)', '学習時間(分)',
+      '開始日時', '終了日時', 'タイマー種別', 'レベル', '獲得EXP', 'メモ', 'ユーザーエージェント'
+    ],
+    rows: filtered.map((l) => [
+      l.dataset, labelOf(l.dataset), l.id, l.participantId, l.uid, l.deviceId, l.mode, l.subject, l.durationSeconds,
+      Math.round((l.durationSeconds / 60) * 10) / 10, dateTimeText(l.startedAt), dateTimeText(l.endedAt),
+      l.timerType, l.level ?? '', l.expGained ?? '', l.memo, l.userAgent
+    ])
+  });
 
-  const exportParticipantsCsv = () => {
-    if (participantRows.length === 0) {
-      alert('出力できるデータがありません');
-      return;
-    }
-    downloadCsv(
-      `participant_summary_${filePrefix}_${today}.csv`,
-      ['参加者', '参加者ID入力', 'モード', '記録数', '学習日数', '合計学習時間(分)', '1回平均(分)', '最初の記録', '最後の記録'],
-      participantRows.map((r) => [
-        r.label,
-        r.hasParticipantId ? 'あり' : 'なし',
-        r.modes.map(modeLabel).join('/'),
-        r.count,
-        r.studyDays,
-        Math.round((r.totalSeconds / 60) * 10) / 10,
-        Math.round((r.totalSeconds / 60 / r.count) * 10) / 10,
-        dateTimeText(r.first),
-        dateTimeText(r.last)
-      ])
-    );
-  };
+  const participantsTable = (): Sheet => ({
+    name: '参加者別',
+    headers: ['参加者', '参加者ID入力', 'モード', '記録数', '学習日数', '合計学習時間(分)', '1回平均(分)', '最初の記録', '最後の記録'],
+    rows: participantRows.map((r) => [
+      r.label,
+      r.hasParticipantId ? 'あり' : 'なし',
+      r.modes.map(modeLabel).join('/'),
+      r.count,
+      r.studyDays,
+      Math.round((r.totalSeconds / 60) * 10) / 10,
+      Math.round((r.totalSeconds / 60 / r.count) * 10) / 10,
+      dateTimeText(r.first),
+      dateTimeText(r.last)
+    ])
+  });
 
-  const exportBehaviorCsv = () => {
-    if (behaviorRows.length === 0) {
-      alert('出力できるデータがありません');
-      return;
-    }
-    downloadCsv(
-      `behavior_summary_${filePrefix}_${today}.csv`,
-      [
-        '参加者', '参加者ID入力', '起動回数', '再開回数', 'BGM再生回数', 'BGM再生時間(分)',
-        'タップ数', '表示時間(分)', 'タップ/分', 'クエスト追加', 'クエスト達成', 'クエスト削除',
-        'タイマー開始', 'タイマー一時停止', 'タイマーリセット', '学習記録数', '合計学習時間(分)'
-      ],
-      behaviorRows.map((r) => [
-        r.label, r.hasParticipantId ? 'あり' : 'なし', r.launches, r.resumes, r.bgmPlays,
-        round1(r.bgmSeconds / 60), r.taps, round1(r.tapSeconds / 60), round1(tapsPerMinute(r.taps, r.tapSeconds)),
-        r.questAdds, r.questCompletes, r.questDeletes, r.timerStarts, r.timerPauses, r.timerResets,
-        r.studyCount, round1(r.studySeconds / 60)
-      ])
-    );
-  };
+  const behaviorTable = (): Sheet => ({
+    name: '行動集計',
+    headers: [
+      '参加者', '参加者ID入力', '起動回数', '再開回数', 'BGM再生回数', 'BGM再生時間(分)',
+      'タップ数', '表示時間(分)', 'タップ/分', 'クエスト追加', 'クエスト達成', 'クエスト削除',
+      'タイマー開始', 'タイマー一時停止', 'タイマーリセット', '学習記録数', '合計学習時間(分)'
+    ],
+    rows: behaviorRows.map((r) => [
+      r.label, r.hasParticipantId ? 'あり' : 'なし', r.launches, r.resumes, r.bgmPlays,
+      round1(r.bgmSeconds / 60), r.taps, round1(r.tapSeconds / 60), round1(tapsPerMinute(r.taps, r.tapSeconds)),
+      r.questAdds, r.questCompletes, r.questDeletes, r.timerStarts, r.timerPauses, r.timerResets,
+      r.studyCount, round1(r.studySeconds / 60)
+    ])
+  });
 
-  const exportEventsCsv = () => {
-    if (filteredEvents.length === 0) {
+  const eventsTable = (): Sheet => ({
+    name: '行動記録',
+    headers: [
+      'データ', 'データ名', 'イベントID', '日時', '参加者ID', 'UID', '端末ID', '起動ID', 'モード', '画面',
+      '種類', '種類（日本語）', '内容', '秒数', '回数'
+    ],
+    rows: filteredEvents.map((e) => [
+      e.dataset, labelOf(e.dataset), e.id, dateTimeText(e.at), e.participantId, e.uid, e.deviceId, e.sessionId, e.mode, e.screen,
+      e.type, eventLabel(e.type), e.label, e.seconds ?? '', e.count ?? ''
+    ])
+  });
+
+  const exportCsv = (file: string, table: Sheet) => {
+    if (table.rows.length === 0) {
       alert('出力できるデータがありません');
       return;
     }
-    downloadCsv(
-      `research_events_${filePrefix}_${today}.csv`,
-      [
-        'データ', 'イベントID', '日時', '参加者ID', 'UID', '端末ID', '起動ID', 'モード', '画面',
-        '種類', '種類（日本語）', '内容', '秒数', '回数'
-      ],
-      filteredEvents.map((e) => [
-        e.dataset, e.id, dateTimeText(e.at), e.participantId, e.uid, e.deviceId, e.sessionId, e.mode, e.screen,
-        e.type, eventLabel(e.type), e.label, e.seconds ?? '', e.count ?? ''
-      ])
-    );
+    downloadCsv(file, table.headers, table.rows);
+  };
+  const exportLogsCsv = () => exportCsv(`research_logs_${filePrefix}_${today}.csv`, logsTable());
+  const exportParticipantsCsv = () => exportCsv(`participant_summary_${filePrefix}_${today}.csv`, participantsTable());
+  const exportBehaviorCsv = () => exportCsv(`behavior_summary_${filePrefix}_${today}.csv`, behaviorTable());
+  const exportEventsCsv = () => exportCsv(`research_events_${filePrefix}_${today}.csv`, eventsTable());
+
+  // 4つの表をシートに分けて、1つの Excel ファイルにまとめる
+  const exportXlsx = () => {
+    if (filtered.length === 0 && filteredEvents.length === 0) {
+      alert('出力できるデータがありません');
+      return;
+    }
+    const about: Sheet = {
+      name: '説明',
+      headers: ['項目', '内容'],
+      rows: [
+        ['対象データ', datasetText],
+        ['モード', modeFilter === 'all' ? 'すべて' : modeLabel(modeFilter)],
+        ['参加者', participantFilter === 'all' ? '全員' : participantFilter],
+        ['期間', dateFrom || dateTo ? `${dateFrom || '最初'} 〜 ${dateTo || '最後'}` : 'すべて'],
+        ['出力日時', dateTimeText(new Date())],
+        ['学習記録', `${filtered.length} 件`],
+        ['行動記録', `${filteredEvents.length} 件`]
+      ]
+    };
+    downloadXlsx(`research_${filePrefix}_${today}.xlsx`, [about, participantsTable(), behaviorTable(), logsTable(), eventsTable()]);
   };
 
   const eventDetail = (e: EventRecord) => {
@@ -580,7 +622,7 @@ export const ResearchDataPanel: React.FC = () => {
             <p className="text-[11px] text-neutral-300 mt-1">
               いま記録中：
               <span className="font-black text-sky-300 text-sm ml-1">
-                {currentDataset === null ? '確認中…' : `データ${currentDataset}`}
+                {currentDataset === null ? '確認中…' : labelOf(currentDataset)}
               </span>
             </p>
             <p className="text-[10px] text-neutral-500 mt-1 leading-relaxed">
@@ -607,7 +649,7 @@ export const ResearchDataPanel: React.FC = () => {
                   : 'bg-neutral-900 text-neutral-300 border-neutral-700 hover:bg-neutral-800'
               }`}
             >
-              データ{n}
+              {labelOf(n)}
               {n === currentDataset && <span className="ml-1 text-[9px] opacity-80">記録中</span>}
             </button>
           ))}
@@ -622,7 +664,58 @@ export const ResearchDataPanel: React.FC = () => {
             すべて
           </button>
         </div>
-        <p className="text-[10px] text-neutral-500">下の集計・一覧・CSV はすべて「{datasetText}」の内容です</p>
+        {/* 名前の変更（データを1つ選んでいるとき） */}
+        {selectedDataset !== null && (
+          nameDraft === null ? (
+            <button
+              onClick={() => setNameDraft(datasetNames[String(selectedDataset)] ?? '')}
+              className="text-[11px] text-sky-300 hover:text-sky-200 flex items-center gap-1"
+            >
+              <Pencil size={12} /> 「{labelOf(selectedDataset)}」の名前を変更
+            </button>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveName();
+              }}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <span className="text-[11px] text-neutral-400">データ{selectedDataset} の名前</span>
+              <input
+                autoFocus
+                value={nameDraft}
+                maxLength={DATASET_NAME_MAX}
+                onChange={(e) => setNameDraft(e.target.value)}
+                placeholder={`例: 予備実験、本実験1週目（空にすると「データ${selectedDataset}」）`}
+                className="flex-1 min-w-[12rem] px-3 py-1.5 bg-neutral-900 border border-neutral-700 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500"
+              />
+              <button
+                type="submit"
+                disabled={isSavingName}
+                className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1"
+              >
+                <Check size={12} /> {isSavingName ? '保存中...' : '保存'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setNameDraft(null)}
+                className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-xl text-xs font-bold"
+              >
+                やめる
+              </button>
+            </form>
+          )
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[10px] text-neutral-500">下の集計・一覧・CSV・Excel はすべて「{datasetText}」の内容です</p>
+          <button
+            onClick={exportXlsx}
+            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition text-xs font-bold flex items-center gap-1.5"
+          >
+            <FileSpreadsheet size={14} /> まとめてExcel（全シート）
+          </button>
+        </div>
       </div>
 
       {/* 絞り込み */}

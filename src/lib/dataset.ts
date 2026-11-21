@@ -41,15 +41,42 @@ const wipeLocalProgress = () => {
 };
 
 // サーバー上の現在のデータ番号（未設定なら 1）
-export const fetchCurrentDataset = async (): Promise<number> => {
+export const fetchCurrentDataset = async (): Promise<number> => (await fetchDatasetInfo()).current;
+
+// 番号と、管理者が付けた名前（{ '1': '予備実験', ... }）
+export interface DatasetInfo {
+  current: number;
+  names: Record<string, string>;
+}
+export const fetchDatasetInfo = async (): Promise<DatasetInfo> => {
   const snap = await getDoc(doc(db, ...SETTINGS_PATH));
-  const current = snap.exists() ? Number(snap.data()?.current) : 1;
-  return Number.isInteger(current) && current >= 1 ? current : 1;
+  const data = snap.exists() ? snap.data() : undefined;
+  const current = Number(data?.current);
+  const rawNames = data?.names && typeof data.names === 'object' ? (data.names as Record<string, unknown>) : {};
+  const names = Object.fromEntries(
+    Object.entries(rawNames).filter(([, v]) => typeof v === 'string' && v.trim() !== '') as [string, string][]
+  );
+  return { current: Number.isInteger(current) && current >= 1 ? current : 1, names };
 };
 
-// 管理者用：次のデータを開始する
+// 表示名：名前があれば「名前」、なければ「データN」
+export const DATASET_NAME_MAX = 40;
+export const datasetLabel = (n: number, names: Record<string, string> = {}) => names[String(n)] || `データ${n}`;
+
+// 管理者用：次のデータを開始する（付けた名前は残す）
 export const startNextDataset = async (next: number) => {
-  await setDoc(doc(db, ...SETTINGS_PATH), { current: next, updatedAt: serverTimestamp() });
+  await setDoc(doc(db, ...SETTINGS_PATH), { current: next, updatedAt: serverTimestamp() }, { merge: true });
+};
+
+// 管理者用：データの名前を変える（空にすると「データN」に戻る）。
+// current は今の記録中の番号（設定がまだ無いときにも保存できるよう一緒に書く）
+export const renameDataset = async (n: number, name: string, current: number) => {
+  const clean = name.trim().slice(0, DATASET_NAME_MAX);
+  await setDoc(
+    doc(db, ...SETTINGS_PATH),
+    { current, names: { [String(n)]: clean }, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
 };
 
 // アプリ起動時、画面を出す前に 1 回だけ呼ぶ。

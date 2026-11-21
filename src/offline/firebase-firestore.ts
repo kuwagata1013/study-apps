@@ -92,9 +92,21 @@ export const getDoc = async (ref: DocumentReference) => {
   return makeSnap(ref.id, stored ?? builtIn(ref));
 };
 
-export const setDoc = async (ref: DocumentReference, data: Record<string, unknown>) => {
+// merge: true のときは、入れ子のオブジェクトも含めて既存の内容に重ねる（本物の Firestore と同じ）
+const isPlain = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v) && !(typeof (v as { __ts?: unknown }).__ts === 'number');
+const deepMerge = (base: Record<string, unknown>, add: Record<string, unknown>): Record<string, unknown> => {
+  const out = { ...base };
+  for (const [k, v] of Object.entries(add)) {
+    out[k] = isPlain(v) && isPlain(out[k]) ? deepMerge(out[k] as Record<string, unknown>, v) : v;
+  }
+  return out;
+};
+
+export const setDoc = async (ref: DocumentReference, data: Record<string, unknown>, options?: { merge?: boolean }) => {
   const docs = load(ref.parent);
-  docs[ref.id] = encode(data) as Record<string, unknown>;
+  const encoded = encode(data) as Record<string, unknown>;
+  docs[ref.id] = options?.merge && docs[ref.id] ? deepMerge(docs[ref.id], encoded) : encoded;
   save(ref.parent, docs);
 };
 
