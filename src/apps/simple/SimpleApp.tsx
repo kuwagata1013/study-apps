@@ -28,7 +28,8 @@ import { auth } from '../../firebase';
 import { getLocalAvatar, setLocalAvatar, resizeImageFile, isDataUrl } from '../../lib/avatar';
 import { saveResearchLog } from '../../lib/researchLog';
 import { trackEvent } from '../../lib/researchEvents';
-import { useBgmTracking, useScreenTracking } from '../../lib/useResearchTracking';
+import { useScreenTracking } from '../../lib/useResearchTracking';
+import { useBgm } from '../../lib/useBgm';
 import { getParticipantId } from '../../lib/participant';
 import { updateProfile, signOut } from 'firebase/auth';
 
@@ -86,12 +87,13 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
 
   // 4. BGM関連ステート
-  const [isPlayingBgm, setIsPlayingBgm] = useState(false);
-  const [bgmType, setBgmType] = useState<'rain' | 'waves' | 'cafe'>('rain');
+  const { isPlaying: isPlayingBgm, track: bgmType, toggle: toggleBgm, select: selectBgm } = useBgm<'rain' | 'waves' | 'cafe'>(
+    'rain',
+    { rain: 'rain', waves: 'waves', cafe: 'cafe' }
+  );
 
   // 行動データ：表示中のタブと BGM の再生状態
   useScreenTracking(activeTab);
-  useBgmTracking(isPlayingBgm, bgmType);
 
   // 5. カレンダー・統計操作ステート
   const [statsPeriod, setStatsPeriod] = useState<'day' | 'week' | 'month'>('week');
@@ -927,10 +929,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => {
-                      if (bgmType !== item.id) trackEvent('bgm_select', { label: item.id });
-                      setBgmType(item.id as any);
-                    }}
+                    onClick={() => selectBgm(item.id as 'rain' | 'waves' | 'cafe')}
                     className={`py-3 px-2 rounded-2xl text-xs font-bold transition border ${
                       bgmType === item.id 
                         ? 'bg-gray-900 text-white border-gray-900' 
@@ -943,7 +942,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
               </div>
 
               <button
-                onClick={() => setIsPlayingBgm(!isPlayingBgm)}
+                onClick={toggleBgm}
                 className={`w-full py-3.5 rounded-2xl font-bold text-white transition flex items-center justify-center gap-2 shadow-sm ${
                   isPlayingBgm ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-900 hover:bg-gray-800'
                 }`}

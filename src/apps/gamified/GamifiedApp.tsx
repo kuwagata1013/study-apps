@@ -24,7 +24,8 @@ import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
 import { trackEvent } from '../../lib/researchEvents';
-import { useBgmTracking, useScreenTracking } from '../../lib/useResearchTracking';
+import { useScreenTracking } from '../../lib/useResearchTracking';
+import { useBgm } from '../../lib/useBgm';
 import walkSheetUrl from '../../assets/character/walk_sheet.png';
 import sitUrl from '../../assets/character/sit.png';
 
@@ -106,12 +107,13 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const [newTaskMinutes, setNewTaskMinutes] = useState(1);
 
   // 5. BGM関連ステート
-  const [isPlayingBgm, setIsPlayingBgm] = useState(false);
-  const [bgmType, setBgmType] = useState<'cyber' | 'lofi' | 'rain'>('cyber');
+  const { isPlaying: isPlayingBgm, track: bgmType, toggle: toggleBgm, select: selectBgm } = useBgm<'cyber' | 'lofi' | 'rain'>(
+    'cyber',
+    { cyber: 'cyber', lofi: 'lofi', rain: 'deep_rain' }
+  );
 
   // 行動データ：表示中のタブと BGM の再生状態
   useScreenTracking(activeTab);
-  useBgmTracking(isPlayingBgm, bgmType);
 
   // 初回マウントの二重実行を防ぐためのRef
   const hasInitializedRef = useRef(false);
@@ -768,10 +770,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   ].map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => {
-                        if (bgmType !== item.id) trackEvent('bgm_select', { label: item.id });
-                        setBgmType(item.id as any);
-                      }}
+                      onClick={() => selectBgm(item.id as 'cyber' | 'lofi' | 'rain')}
                       className={`py-3 px-2 rounded-2xl text-xs font-bold transition border ${
                         bgmType === item.id 
                           ? 'bg-purple-600 text-white border-purple-400 shadow-lg shadow-purple-600/30' 
@@ -784,7 +783,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                 </div>
 
                 <button
-                  onClick={() => setIsPlayingBgm(!isPlayingBgm)}
+                  onClick={toggleBgm}
                   className={`w-full py-3.5 rounded-2xl font-black text-white transition flex items-center justify-center gap-2 shadow-lg ${
                     isPlayingBgm ? 'bg-amber-600 hover:bg-amber-500' : 'bg-purple-600 hover:bg-purple-500'
                   }`}
