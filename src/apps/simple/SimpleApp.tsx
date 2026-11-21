@@ -27,6 +27,8 @@ import {
 import { auth } from '../../firebase';
 import { getLocalAvatar, setLocalAvatar, resizeImageFile, isDataUrl } from '../../lib/avatar';
 import { saveResearchLog } from '../../lib/researchLog';
+import { trackEvent } from '../../lib/researchEvents';
+import { useBgmTracking, useScreenTracking } from '../../lib/useResearchTracking';
 import { getParticipantId } from '../../lib/participant';
 import { updateProfile, signOut } from 'firebase/auth';
 
@@ -86,6 +88,10 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   // 4. BGM関連ステート
   const [isPlayingBgm, setIsPlayingBgm] = useState(false);
   const [bgmType, setBgmType] = useState<'rain' | 'waves' | 'cafe'>('rain');
+
+  // 行動データ：表示中のタブと BGM の再生状態
+  useScreenTracking(activeTab);
+  useBgmTracking(isPlayingBgm, bgmType);
 
   // 5. カレンダー・統計操作ステート
   const [statsPeriod, setStatsPeriod] = useState<'day' | 'week' | 'month'>('week');
@@ -171,6 +177,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
         setElapsedSecondsCount((sec) => sec + step);
         if (next <= 0) {
           clearInterval(interval);
+          trackEvent('timer_finish', { label: subject, count: targetMinutes });
           setIsActive(false);
           alert('設定時間が経過しました！');
         }
@@ -322,6 +329,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       dueDate: newTaskDueDate || undefined
     };
 
+    trackEvent('quest_add', { label: newTask.title });
     const taskKey = 'simple_tasks';
     const updated = [newTask, ...tasks];
     setTasks(updated);
@@ -340,6 +348,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     const updated = tasks.map((t) => {
       if (t.id === id) {
         const nextState = !t.completed;
+        trackEvent(nextState ? 'quest_complete' : 'quest_uncomplete', { label: t.title });
         return {
           ...t,
           completed: nextState,
@@ -356,6 +365,8 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   // ToDo 削除
   const deleteTask = (id: string) => {
     const taskKey = 'simple_tasks';
+    const target = tasks.find((t) => t.id === id);
+    if (target) trackEvent('quest_delete', { label: target.title });
     const updated = tasks.filter((t) => t.id !== id);
     setTasks(updated);
     localStorage.setItem(taskKey, JSON.stringify(updated));
@@ -501,7 +512,10 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
               {/* 操作ボタン */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => setIsActive(!isActive)}
+                  onClick={() => {
+                    trackEvent(isActive ? 'timer_pause' : 'timer_start', { label: subject, seconds: elapsedSecondsCount });
+                    setIsActive(!isActive);
+                  }}
                   className={`flex-1 py-4 rounded-2xl font-bold text-white transition flex items-center justify-center gap-2 shadow-md ${
                     isActive ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-900 hover:bg-gray-800'
                   }`}
@@ -512,6 +526,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                 
                 <button
                   onClick={() => {
+                    if (elapsedSecondsCount > 0) trackEvent('timer_reset', { label: subject, seconds: elapsedSecondsCount });
                     setIsActive(false);
                     setSeconds(timerMode === 'countdown' ? targetMinutes * 60 : 0);
                     setElapsedSecondsCount(0);
@@ -912,7 +927,10 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setBgmType(item.id as any)}
+                    onClick={() => {
+                      if (bgmType !== item.id) trackEvent('bgm_select', { label: item.id });
+                      setBgmType(item.id as any);
+                    }}
                     className={`py-3 px-2 rounded-2xl text-xs font-bold transition border ${
                       bgmType === item.id 
                         ? 'bg-gray-900 text-white border-gray-900' 

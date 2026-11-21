@@ -8,6 +8,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { getParticipantId, isValidParticipantId } from './lib/participant';
+import { setEventMode, setEventUser, startEventTracking } from './lib/researchEvents';
 import StartApp from './apps/start/StartApp';
 import GamifiedApp from './apps/gamified/GamifiedApp';
 import SimpleApp from './apps/simple/SimpleApp';
@@ -18,7 +19,13 @@ type AppMode = 'start' | 'simple' | 'gamified' | 'admin';
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [mode, setMode] = useState<AppMode>('start');
+  // 前回選んだモードを最初の描画から使う（参加者IDが未入力の場合はスタート画面で入力してもらう）
+  const [mode, setMode] = useState<AppMode>(() => {
+    const savedMode = localStorage.getItem('study_app_preferred_mode');
+    return (savedMode === 'simple' || savedMode === 'gamified') && isValidParticipantId(getParticipantId())
+      ? savedMode
+      : 'start';
+  });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // 管理者画面アクセス保護用
@@ -33,16 +40,13 @@ export const App: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [message, setMessage] = useState('');
 
-  // 初回起動時のモード自動読み込み＆認証状態の監視
+  // 認証状態の監視
   useEffect(() => {
-    const savedMode = localStorage.getItem('study_app_preferred_mode') as AppMode;
-    // 参加者IDが未入力の場合はスタート画面で入力してもらう
-    if (savedMode && (savedMode === 'simple' || savedMode === 'gamified') && isValidParticipantId(getParticipantId())) {
-      setMode(savedMode);
-    }
-
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      // 行動データ：ログイン状態がわかってから起動を記録する
+      setEventUser(currentUser?.uid);
+      startEventTracking();
       if (currentUser) {
         setDisplayName(currentUser.displayName || '');
         setPhotoURL(currentUser.photoURL || '');
@@ -51,6 +55,11 @@ export const App: React.FC = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // 行動データに現在のモードを付ける
+  useEffect(() => {
+    setEventMode(mode);
+  }, [mode]);
 
   // モード選択処理
   const handleSelectMode = (selectedMode: 'simple' | 'gamified') => {

@@ -49,6 +49,39 @@ service cloud.firestore {
         && d.createdAt == request.time;
     }
 
+    // 行動データ（起動・BGM・タップ・クエスト・タイマー操作）: 追加のみ。閲覧は管理者のみ
+    match /researchEvents/{eventId} {
+      allow read: if isAdmin();
+      allow update, delete: if false;
+      allow create: if isValidEvent(request.resource.data);
+    }
+
+    function isValidEvent(d) {
+      return d.keys().hasOnly([
+          'uid', 'participantId', 'deviceId', 'sessionId', 'mode', 'screen', 'type',
+          'label', 'seconds', 'count', 'clientAt', 'createdAt'
+        ])
+        && d.keys().hasAll([
+          'uid', 'participantId', 'deviceId', 'sessionId', 'mode', 'type', 'clientAt', 'createdAt'
+        ])
+        && (d.uid == 'anonymous' || (request.auth != null && d.uid == request.auth.uid))
+        && d.participantId is string && d.participantId.matches('^[A-Za-z0-9_-]{0,32}$')
+        && d.deviceId is string && d.deviceId.size() <= 64
+        && d.sessionId is string && d.sessionId.size() <= 64
+        && d.mode in ['start', 'simple', 'gamified', 'admin']
+        && (!('screen' in d) || (d.screen is string && d.screen.size() <= 32))
+        && d.type in [
+          'app_launch', 'app_resume', 'bgm_select', 'bgm_play', 'bgm_stop', 'tap_summary',
+          'quest_add', 'quest_complete', 'quest_uncomplete', 'quest_delete',
+          'timer_start', 'timer_pause', 'timer_reset', 'timer_finish'
+        ]
+        && (!('label' in d) || (d.label is string && d.label.size() <= 100))
+        && (!('seconds' in d) || (d.seconds is int && d.seconds >= 0 && d.seconds <= 864000))
+        && (!('count' in d) || (d.count is int && d.count >= 0 && d.count <= 1000000))
+        && d.clientAt is timestamp
+        && d.createdAt == request.time;
+    }
+
     // それ以外はすべて拒否
     match /{document=**} {
       allow read, write: if false;

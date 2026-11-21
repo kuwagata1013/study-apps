@@ -23,6 +23,8 @@ import {
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
+import { trackEvent } from '../../lib/researchEvents';
+import { useBgmTracking, useScreenTracking } from '../../lib/useResearchTracking';
 import walkSheetUrl from '../../assets/character/walk_sheet.png';
 import sitUrl from '../../assets/character/sit.png';
 
@@ -107,6 +109,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const [isPlayingBgm, setIsPlayingBgm] = useState(false);
   const [bgmType, setBgmType] = useState<'cyber' | 'lofi' | 'rain'>('cyber');
 
+  // 行動データ：表示中のタブと BGM の再生状態
+  useScreenTracking(activeTab);
+  useBgmTracking(isPlayingBgm, bgmType);
+
   // 初回マウントの二重実行を防ぐためのRef
   const hasInitializedRef = useRef(false);
 
@@ -172,6 +178,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
       loadedTasks = loadedTasks.map(t => {
         if (t.id === 'daily_login') {
+          if (!t.completed) trackEvent('quest_complete', { label: t.title });
           return { ...t, completed: true };
         }
         return t;
@@ -279,6 +286,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
         if (subjectTotalMinutes >= task.targetMinutes) {
           newlyCompletedCount++;
+          trackEvent('quest_complete', { label: task.title, count: task.targetMinutes });
           return { ...task, completed: true };
         }
       }
@@ -364,6 +372,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       targetMinutes: minutes
     };
 
+    trackEvent('quest_add', { label: newTask.title, count: minutes });
     const updated = [...tasks, newTask];
     setTasks(updated);
     localStorage.setItem('gamified_tasks', JSON.stringify(updated));
@@ -372,6 +381,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   };
 
   const deleteTask = (id: string) => {
+    const target = tasks.find((t) => t.id === id);
+    if (target) trackEvent('quest_delete', { label: target.title });
     const updated = tasks.filter(t => t.id !== id);
     setTasks(updated);
     localStorage.setItem('gamified_tasks', JSON.stringify(updated));
@@ -523,7 +534,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                 <div className="space-y-3 pt-2">
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setIsActive(!isActive)}
+                      onClick={() => {
+                        trackEvent(isActive ? 'timer_pause' : 'timer_start', { label: subject, seconds });
+                        setIsActive(!isActive);
+                      }}
                       className={`flex-1 py-3.5 rounded-2xl font-black text-white transition flex items-center justify-center gap-2 shadow-lg text-xs ${
                         isActive 
                           ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/30' 
@@ -535,7 +549,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                     </button>
                     
                     <button
-                      onClick={() => { setIsActive(false); setSeconds(0); sessionStartRef.current = null; }}
+                      onClick={() => {
+                        if (seconds > 0) trackEvent('timer_reset', { label: subject, seconds });
+                        setIsActive(false);
+                        setSeconds(0);
+                        sessionStartRef.current = null;
+                      }}
                       className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl transition border border-slate-700"
                       title="リセット"
                     >
@@ -749,7 +768,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   ].map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => setBgmType(item.id as any)}
+                      onClick={() => {
+                        if (bgmType !== item.id) trackEvent('bgm_select', { label: item.id });
+                        setBgmType(item.id as any);
+                      }}
                       className={`py-3 px-2 rounded-2xl text-xs font-bold transition border ${
                         bgmType === item.id 
                           ? 'bg-purple-600 text-white border-purple-400 shadow-lg shadow-purple-600/30' 
