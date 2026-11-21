@@ -1,6 +1,6 @@
 // BGM の選択・再生・停止をまとめたフック（行動データの記録も行う）
 import { useEffect, useState } from 'react';
-import { playBgm, stopBgm, type BgmId } from './bgm';
+import { getBgmVolume, playBgm, setBgmVolume, stopBgm, type BgmId } from './bgm';
 import { trackEvent } from './researchEvents';
 import { useBgmTracking } from './useResearchTracking';
 
@@ -39,5 +39,26 @@ export const useBgm = <T extends string>(initial: T, sources: Record<T, BgmId>) 
     if (isPlaying) start(id);
   };
 
-  return { isPlaying, track, toggle, select };
+  // 曲を選んですぐ再生（再生中の曲をもう一度押したら停止）
+  const playTrack = (id: T) => {
+    if (id === track && isPlaying) {
+      stopBgm();
+      setIsPlaying(false);
+      return;
+    }
+    if (id !== track) {
+      trackEvent('bgm_select', { label: id });
+      setTrack(id);
+    }
+    start(id);
+  };
+
+  // 音量（0〜1）
+  const [volume, setVolumeState] = useState(getBgmVolume);
+  const setVolume = (v: number) => {
+    setBgmVolume(v);
+    setVolumeState(v);
+  };
+
+  return { isPlaying, track, toggle, select, playTrack, volume, setVolume };
 };

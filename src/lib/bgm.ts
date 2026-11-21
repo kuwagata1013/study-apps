@@ -18,15 +18,36 @@ export const BGM_SOURCES = {
 
 export type BgmId = keyof typeof BGM_SOURCES;
 
-const VOLUME = 0.6;
+// 音量（0〜1）。端末に覚えておく
+const VOLUME_KEY = 'bgm_volume';
+const DEFAULT_VOLUME = 0.6;
 let audio: HTMLAudioElement | null = null;
+
+export const getBgmVolume = (): number => {
+  try {
+    const v = Number(localStorage.getItem(VOLUME_KEY));
+    return localStorage.getItem(VOLUME_KEY) !== null && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : DEFAULT_VOLUME;
+  } catch {
+    return DEFAULT_VOLUME;
+  }
+};
+
+export const setBgmVolume = (v: number) => {
+  const vol = Math.min(1, Math.max(0, v));
+  if (audio) audio.volume = vol;
+  try {
+    localStorage.setItem(VOLUME_KEY, String(vol));
+  } catch {
+    // 無視
+  }
+};
 
 const getAudio = () => {
   if (!audio) {
     audio = new Audio();
     audio.loop = true;
     audio.preload = 'auto';
-    audio.volume = VOLUME;
+    audio.volume = getBgmVolume();
   }
   return audio;
 };

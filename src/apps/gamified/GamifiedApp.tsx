@@ -45,6 +45,8 @@ import { useScreenTracking } from '../../lib/useResearchTracking';
 import { useBgm } from '../../lib/useBgm';
 import walkSheetUrl from '../../assets/character/walk_sheet.png';
 import sitUrl from '../../assets/character/sit.png';
+import { BGM_TRACKS, bgmName, type BgmTrack } from './bgmTracks';
+import Equalizer from './Equalizer';
 
 // 歩行アニメーション：1枚の画像（src/assets/character/walk_sheet.png、624 × 864 px、4列 × 3段）に
 // 並んだ12コマで1周（左右1歩ずつ）。表示するコマの部分だけを映す
@@ -133,7 +135,14 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const [newTaskMinutes, setNewTaskMinutes] = useState(1);
 
   // 5. BGM関連ステート
-  const { isPlaying: isPlayingBgm, track: bgmType, toggle: toggleBgm, select: selectBgm } = useBgm<'cyber' | 'lofi' | 'rain'>(
+  const {
+    isPlaying: isPlayingBgm,
+    track: bgmType,
+    toggle: toggleBgm,
+    playTrack: playBgmTrack,
+    volume: bgmVolume,
+    setVolume: setBgmVolume
+  } = useBgm<BgmTrack>(
     'cyber',
     { cyber: 'cyber', lofi: 'lofi', rain: 'deep_rain' }
   );
@@ -262,7 +271,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     }
   }, [isActive]);
 
-  // 歩行アニメーション：新しい8枚の画像を順番に切り替え
+// 歩行アニメーション：新しい8枚の画像を順番に切り替え
   useEffect(() => {
     let animInterval: any = null;
 
@@ -523,7 +532,11 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
               <span className="text-sm font-black text-[#312117] leading-none">{level}</span>
             </div>
             <div className="w-28 md:w-40">
-              <div className="flex justify-between text-[9px] font-bold text-[#fdd69f]">
+              {/* 称号 */}
+              <p className="text-[11px] font-black text-white leading-tight truncate" title={levelTitle(level)}>
+                {levelTitle(level)}
+              </p>
+              <div className="flex justify-between text-[9px] font-bold text-[#fdd69f] mt-0.5">
                 <span className="flex items-center gap-0.5"><Zap size={9} className="text-[#fdd69f]" /> EXP</span>
                 <span>{isMaxLevel ? "MAX" : `${exp} / ${maxExp}`}</span>
               </div>
@@ -640,6 +653,18 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
               >
                 {isActive ? <Pause size={20} /> : <Play size={20} />}
                 {isActive ? '一時停止' : seconds > 0 ? '冒険を再開' : '学習開始'}
+              </button>
+              <button
+                onClick={toggleBgm}
+                className={`w-14 h-14 shrink-0 rounded-2xl transition flex flex-col items-center justify-center gap-1 ${
+                  isPlayingBgm ? 'bg-[#fdd69f]/20 border-2 border-[#fdd69f]/70 text-[#fdd69f]' : 'game-glass text-[#fdd69f] hover:bg-[#fdd69f]/10'
+                }`}
+                title={isPlayingBgm ? `BGMを停止（${bgmName(bgmType)}）` : `BGMを再生（${bgmName(bgmType)}）`}
+                aria-label={isPlayingBgm ? 'BGMを停止' : 'BGMを再生'}
+                aria-pressed={isPlayingBgm}
+              >
+                {isPlayingBgm ? <Equalizer playing /> : <Music size={18} />}
+                <span className="text-[8px] font-bold leading-none text-white/85">{isPlayingBgm ? bgmName(bgmType) : 'BGM'}</span>
               </button>
               <button
                 onClick={() => {
@@ -789,41 +814,101 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
                 {/* BGMタブ */}
                 {activeTab === 'bgm' && (
-                  <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4 text-center">
-                    <h2 className="text-base font-bold text-white flex items-center justify-center gap-2">
-                      <Music size={18} className="text-[#fdd69f]" /> ゾーン突入 BGM
-                    </h2>
-                    <p className="text-xs text-white/65">冒険の没入感を極限まで高めます</p>
-
-                    <div className="grid grid-cols-3 gap-2 pt-2">
-                      {[
-                        { id: 'cyber', label: 'サイバー ⚡' },
-                        { id: 'lofi', label: 'Lo-Fi 🎧' },
-                        { id: 'rain', label: 'ディープ雨 🌧️' },
-                      ].map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => selectBgm(item.id as 'cyber' | 'lofi' | 'rain')}
-                          className={`py-3 px-2 rounded-2xl text-xs font-bold transition border ${
-                            bgmType === item.id 
-                              ? 'bg-[#fdd69f] text-[#312117] border-[#fdd69f] shadow-lg shadow-black/30' 
-                              : 'bg-[#1f140d] text-white/65 border-[#fdd69f]/15 hover:bg-[#4a3424]'
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
+                  <div className="bg-[#312117]/90 rounded-3xl p-5 md:p-6 shadow-xl border border-[#fdd69f]/20 space-y-4 md:max-w-lg md:mx-auto">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-base font-bold text-white flex items-center gap-2">
+                          <Music size={18} className="text-[#fdd69f]" /> ゾーン突入 BGM
+                        </h2>
+                        <p className="text-xs text-white/65 mt-0.5">曲を押すとすぐ流れます</p>
+                      </div>
+                      <Equalizer playing={isPlayingBgm} className="scale-125" />
                     </div>
 
-                    <button
-                      onClick={toggleBgm}
-                      className={`w-full py-3.5 rounded-2xl font-black transition flex items-center justify-center gap-2 shadow-lg ${
-                        isPlayingBgm ? 'bg-[#4a3424] text-white border border-[#fdd69f]/60 hover:bg-[#5a4030]' : 'bg-[#fdd69f] text-[#312117] hover:bg-[#ffe3b8]'
-                      }`}
-                    >
-                      {isPlayingBgm ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                      {isPlayingBgm ? 'サウンド停止' : 'ゾーンBGM再生'}
-                    </button>
+                    {/* 曲の一覧 */}
+                    <div className="space-y-2">
+                      {BGM_TRACKS.map((t) => {
+                        const selected = bgmType === t.id;
+                        const playing = selected && isPlayingBgm;
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => playBgmTrack(t.id)}
+                            aria-pressed={playing}
+                            className={`w-full flex items-center gap-3 p-3 rounded-2xl border text-left transition ${
+                              playing
+                                ? 'bg-[#fdd69f] border-[#fdd69f] shadow-lg shadow-black/30'
+                                : selected
+                                  ? 'bg-[#4a3424] border-[#fdd69f]/50'
+                                  : 'bg-[#1f140d] border-[#fdd69f]/15 hover:bg-[#4a3424]'
+                            }`}
+                          >
+                            <span
+                              className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center ${
+                                playing ? 'bg-[#312117] text-[#fdd69f]' : 'bg-[#312117] text-[#fdd69f]/80'
+                              }`}
+                            >
+                              {t.icon}
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className={`block text-sm font-black ${playing ? 'text-[#312117]' : 'text-white'}`}>{t.name}</span>
+                              <span className={`block text-[11px] truncate ${playing ? 'text-[#312117]/75' : 'text-white/60'}`}>{t.desc}</span>
+                            </span>
+                            <span
+                              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center ${
+                                playing ? 'bg-[#312117] text-[#fdd69f]' : 'bg-[#fdd69f]/10 text-[#fdd69f]'
+                              }`}
+                            >
+                              {playing ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* 再生・停止と音量 */}
+                    <div className="bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 p-3 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={toggleBgm}
+                          className={`w-12 h-12 shrink-0 rounded-full flex items-center justify-center transition shadow-lg ${
+                            isPlayingBgm ? 'bg-[#4a3424] text-[#fdd69f] border border-[#fdd69f]/60' : 'bg-[#fdd69f] text-[#312117] hover:bg-[#ffe3b8]'
+                          }`}
+                          aria-label={isPlayingBgm ? 'BGMを停止' : 'BGMを再生'}
+                        >
+                          {isPlayingBgm ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
+                        </button>
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-white/55">{isPlayingBgm ? '再生中' : '停止中'}</p>
+                          <p className="text-sm font-black text-white truncate">{bgmName(bgmType)}</p>
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setBgmVolume(bgmVolume > 0 ? 0 : 0.6)}
+                          className="text-[#fdd69f] shrink-0"
+                          aria-label={bgmVolume > 0 ? 'ミュート' : 'ミュート解除'}
+                        >
+                          {bgmVolume > 0 ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                        </button>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={Math.round(bgmVolume * 100)}
+                          onChange={(e) => setBgmVolume(Number(e.target.value) / 100)}
+                          className="bgm-volume flex-1"
+                          aria-label="音量"
+                        />
+                        <span className="w-9 text-right text-[11px] font-bold text-white/80">{Math.round(bgmVolume * 100)}%</span>
+                      </label>
+                    </div>
+
+                    <p className="text-[10px] text-white/45 text-center">
+                      冒険画面の下にある <Music size={10} className="inline -mt-0.5 text-[#fdd69f]" /> ボタンでも再生・停止できます
+                    </p>
                   </div>
                 )}
 
