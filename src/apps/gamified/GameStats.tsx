@@ -15,11 +15,11 @@ interface GameStatsProps {
 const SUBJECT_COLORS: Record<string, string> = {
   国語: 'bg-rose-500',
   数学: 'bg-sky-500',
-  英語: 'bg-purple-500',
+  英語: 'bg-[#fdd69f]',
   理科: 'bg-emerald-500',
   社会: 'bg-amber-500'
 };
-const subjectColor = (s: string) => SUBJECT_COLORS[s] ?? 'bg-slate-400';
+const subjectColor = (s: string) => SUBJECT_COLORS[s] ?? 'bg-[#fdd69f]/50';
 
 const Tile: React.FC<{ icon: React.ReactNode; label: string; value: string; sub?: string; accent: string }> = ({
   icon,
@@ -28,12 +28,12 @@ const Tile: React.FC<{ icon: React.ReactNode; label: string; value: string; sub?
   sub,
   accent
 }) => (
-  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
-    <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1.5">
+  <div className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15">
+    <p className="text-[10px] text-white/65 font-bold flex items-center gap-1.5">
       {icon} {label}
     </p>
     <p className={`text-xl md:text-2xl font-black mt-1 ${accent}`}>{value}</p>
-    {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
+    {sub && <p className="text-[10px] text-white/50 mt-0.5">{sub}</p>}
   </div>
 );
 
@@ -117,24 +117,24 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
   return (
     <div className="space-y-4">
       {/* レベルと称号 */}
-      <div className="bg-gradient-to-br from-purple-950 via-slate-900 to-slate-950 rounded-3xl p-6 shadow-xl border border-purple-500/30">
+      <div className="bg-gradient-to-br from-[#4a3424] via-[#312117] to-[#1f140d] rounded-3xl p-6 shadow-xl border border-[#fdd69f]/30">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br from-purple-600 to-pink-600 flex flex-col items-center justify-center shadow-lg shadow-purple-600/40">
-            <span className="text-[9px] font-bold text-purple-100 leading-none">Lv.</span>
-            <span className="text-2xl font-black text-white leading-none">{level}</span>
+          <div className="w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br from-[#fdd69f] to-[#e0a65c] flex flex-col items-center justify-center shadow-lg shadow-black/30">
+            <span className="text-[9px] font-bold text-[#312117] leading-none">Lv.</span>
+            <span className="text-2xl font-black text-[#312117] leading-none">{level}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] text-purple-300 font-bold flex items-center gap-1">
+            <p className="text-[10px] text-white font-bold flex items-center gap-1">
               <Trophy size={12} className="text-yellow-300" /> 称号
             </p>
             <p className="text-lg font-black text-white">{levelTitle(level)}</p>
-            <div className="mt-2 h-2.5 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+            <div className="mt-2 h-2.5 w-full bg-[#4a3424] rounded-full overflow-hidden border border-[#fdd69f]/25">
               <div
-                className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-400 rounded-full"
+                className="h-full bg-gradient-to-r from-[#fdd69f] via-[#f5c27a] to-[#ffe9c7] rounded-full"
                 style={{ width: `${expRatio}%` }}
               />
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">
+            <p className="text-[10px] text-white/65 mt-1">
               {exp} / {maxExp} EXP ・ 次のレベルまであと <span className="text-yellow-300 font-bold">{maxExp - exp} EXP</span>
             </p>
           </div>
@@ -157,7 +157,7 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
           label="累計学習"
           value={formatMinutes(stats.totalMin)}
           sub={`${logs.length} 回・${stats.studyDays} 日`}
-          accent="text-purple-300"
+          accent="text-white"
         />
         <Tile icon={<Zap size={12} />} label="学習で得たEXP" value={`${stats.totalExp}`} accent="text-yellow-300" />
         <Tile
@@ -171,14 +171,14 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
           icon={<BookOpen size={12} />}
           label="1回あたり"
           value={logs.length ? formatMinutes(stats.totalMin / logs.length) : '-'}
-          accent="text-slate-200"
+          accent="text-white"
         />
       </div>
 
       {/* 直近7日のグラフ */}
-      <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-4">
-        <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-          <BarChart2 size={16} className="text-purple-400" /> 直近7日の学習時間
+      <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <BarChart2 size={16} className="text-[#fdd69f]" /> 直近7日の学習時間
         </h3>
         <div className="grid grid-cols-7 gap-2 items-end h-40">
           {stats.last7.map((d) => {
@@ -187,19 +187,19 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
             return (
               <div key={d.key} className="flex flex-col items-center justify-end h-full gap-1">
                 {/* 幅が狭いので「分」だけで表示（例: 80分） */}
-                <span className={`text-[10px] font-bold whitespace-nowrap ${d.minutes ? 'text-slate-200' : 'text-slate-600'}`}>
+                <span className={`text-[10px] font-bold whitespace-nowrap ${d.minutes ? 'text-white' : 'text-white/40'}`}>
                   {d.minutes ? `${Math.round(d.minutes)}分` : '-'}
                 </span>
                 <div className="w-full flex-1 flex items-end">
                   <div
                     className={`w-full rounded-t-lg ${
-                      isToday ? 'bg-gradient-to-t from-pink-600 to-yellow-400' : 'bg-gradient-to-t from-purple-700 to-purple-400'
+                      isToday ? 'bg-gradient-to-t from-[#e0a65c] to-[#ffe9c7]' : 'bg-gradient-to-t from-[#7a5536] to-[#b98a5a]'
                     }`}
                     style={{ height: `${h}%` }}
                   />
                 </div>
-                <span className={`text-[10px] font-bold ${isToday ? 'text-yellow-300' : 'text-slate-400'}`}>{d.label}</span>
-                <span className="text-[9px] text-slate-600">{d.date}</span>
+                <span className={`text-[10px] font-bold ${isToday ? 'text-yellow-300' : 'text-white/65'}`}>{d.label}</span>
+                <span className="text-[9px] text-white/40">{d.date}</span>
               </div>
             );
           })}
@@ -207,26 +207,26 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
       </div>
 
       {/* 教科別 */}
-      <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-3">
-        <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-          <BookOpen size={16} className="text-purple-400" /> 教科別の学習時間
+      <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-3">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <BookOpen size={16} className="text-[#fdd69f]" /> 教科別の学習時間
         </h3>
         {stats.subjects.length === 0 ? (
-          <p className="text-xs text-slate-500 text-center py-4">まだ記録がありません</p>
+          <p className="text-xs text-white/50 text-center py-4">まだ記録がありません</p>
         ) : (
           <div className="space-y-3">
             {stats.subjects.map((s) => (
               <div key={s.subject} className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="font-bold text-slate-200 flex items-center gap-2">
+                  <span className="font-bold text-white flex items-center gap-2">
                     <span className={`w-2.5 h-2.5 rounded-full ${subjectColor(s.subject)}`} />
                     {s.subject}
                   </span>
-                  <span className="text-slate-400">
-                    <span className="font-bold text-slate-200">{formatMinutes(s.minutes)}</span>（{Math.round(s.ratio * 100)}%）
+                  <span className="text-white/65">
+                    <span className="font-bold text-white">{formatMinutes(s.minutes)}</span>（{Math.round(s.ratio * 100)}%）
                   </span>
                 </div>
-                <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-2 w-full bg-[#4a3424] rounded-full overflow-hidden">
                   <div className={`h-full rounded-full ${subjectColor(s.subject)}`} style={{ width: `${Math.max(2, s.ratio * 100)}%` }} />
                 </div>
               </div>
@@ -236,21 +236,21 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
       </div>
 
       {/* 日ごとの履歴 */}
-      <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-3">
-        <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-          <Calendar size={16} className="text-purple-400" /> 冒険の記録
+      <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-3">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <Calendar size={16} className="text-[#fdd69f]" /> 冒険の記録
         </h3>
         {stats.history.length === 0 ? (
-          <p className="text-xs text-slate-500 text-center py-4">
+          <p className="text-xs text-white/50 text-center py-4">
             まだ記録がありません。「冒険」タブで学習を始めて、成果を記録しよう！
           </p>
         ) : (
           <div className="space-y-4">
             {stats.history.slice(0, historyDays).map((day) => (
               <div key={day.key} className="space-y-2">
-                <div className="flex justify-between items-baseline border-b border-slate-800 pb-1">
-                  <span className="text-xs font-black text-slate-200">{day.title}</span>
-                  <span className="text-[10px] text-slate-400">
+                <div className="flex justify-between items-baseline border-b border-[#fdd69f]/15 pb-1">
+                  <span className="text-xs font-black text-white">{day.title}</span>
+                  <span className="text-[10px] text-white/65">
                     合計 <span className="font-bold text-emerald-400">{formatMinutes(day.minutes)}</span>
                     <span className="text-yellow-400 font-bold ml-2">+{day.exp} EXP</span>
                   </span>
@@ -258,19 +258,19 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
                 {day.logs.map((log) => {
                   const t = logTime(log);
                   return (
-                    <div key={log.id} className="flex items-center gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
+                    <div key={log.id} className="flex items-center gap-3 p-3 bg-[#1f140d] rounded-xl border border-[#fdd69f]/15">
                       <span className={`w-1.5 self-stretch rounded-full ${subjectColor(log.subject)}`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 text-xs">
-                          <span className="font-bold text-slate-100">{log.subject}</span>
-                          <span className="text-[10px] text-slate-500">
+                          <span className="font-bold text-white">{log.subject}</span>
+                          <span className="text-[10px] text-white/50">
                             {pad(t.getHours())}:{pad(t.getMinutes())}
                           </span>
                         </div>
-                        {log.memo && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{log.memo}</p>}
+                        {log.memo && <p className="text-[11px] text-white/65 mt-0.5 truncate">{log.memo}</p>}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-black text-slate-100">{formatMinutes(log.durationMinutes)}</p>
+                        <p className="text-sm font-black text-white">{formatMinutes(log.durationMinutes)}</p>
                         <p className="text-[10px] text-yellow-400 font-bold">+{log.expGained} EXP</p>
                       </div>
                     </div>
@@ -281,7 +281,7 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
             {stats.history.length > historyDays && (
               <button
                 onClick={() => setHistoryDays((n) => n + HISTORY_STEP)}
-                className="w-full py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold border border-slate-800 transition"
+                className="w-full py-2.5 bg-[#1f140d] hover:bg-[#4a3424] text-white/85 rounded-xl text-xs font-bold border border-[#fdd69f]/15 transition"
               >
                 もっと見る（残り {stats.history.length - historyDays} 日分）
               </button>

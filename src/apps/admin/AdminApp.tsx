@@ -127,26 +127,26 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 pb-12 antialiased">
+    <div className="min-h-screen bg-neutral-900 text-neutral-100 pb-12 antialiased">
       
       {/* 管理者用ヘッダーバー */}
-      <header className="bg-slate-950 border-b border-purple-900/50 p-4 sticky top-0 z-30 shadow-md">
+      <header className="bg-black border-b border-sky-900/50 p-4 sticky top-0 z-30 shadow-md">
         <div className="max-w-3xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-purple-600 rounded-xl text-white">
+            <div className="p-2 bg-sky-600 rounded-xl text-white">
               <Shield size={20} />
             </div>
             <div>
               <h1 className="text-base font-bold text-white flex items-center gap-2">
                 システム管理コントロールパネル
               </h1>
-              <p className="text-[10px] text-slate-400">BGMの追加・削除・データ分析</p>
+              <p className="text-[10px] text-neutral-400">BGMの追加・削除・データ分析</p>
             </div>
           </div>
 
           <button
             onClick={onExitAdmin}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-700"
+            className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-neutral-700"
           >
             <LogOut size={14} /> 管理画面を出る
           </button>
@@ -157,11 +157,11 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
       <main className="max-w-3xl mx-auto p-4 space-y-6 pt-6">
         
         {/* ナビゲーションタブ */}
-        <div className="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 gap-1">
+        <div className="flex bg-black p-1.5 rounded-2xl border border-neutral-800 gap-1">
           <button
             onClick={() => setActiveTab('bgm')}
             className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-              activeTab === 'bgm' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              activeTab === 'bgm' ? 'bg-sky-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'
             }`}
           >
             <Music size={16} /> BGMマスター管理（追加・削除）
@@ -170,7 +170,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
           <button
             onClick={() => setActiveTab('database')}
             className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-              activeTab === 'database' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              activeTab === 'database' ? 'bg-sky-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'
             }`}
           >
             <Database size={16} /> 研究データ
@@ -182,31 +182,31 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
           <div className="space-y-6">
             
             {/* 新規BGM追加フォーム */}
-            <form onSubmit={handleAddBgm} className="bg-slate-950 rounded-3xl p-6 border border-slate-800 space-y-4 shadow-xl">
+            <form onSubmit={handleAddBgm} className="bg-black rounded-3xl p-6 border border-neutral-800 space-y-4 shadow-xl">
               <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <Plus size={18} className="text-purple-400" /> 新しいBGMを追加
+                <Plus size={18} className="text-sky-400" /> 新しいBGMを追加
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">トラック名</label>
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">トラック名</label>
                   <input
                     type="text"
                     value={newBgmName}
                     onChange={(e) => setNewBgmName(e.target.value)}
                     placeholder="例: 静かな雨音"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500"
+                    className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">音源URL (https://...mp3)</label>
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase mb-1">音源URL (https://...mp3)</label>
                   <input
                     type="url"
                     value={newBgmUrl}
                     onChange={(e) => setNewBgmUrl(e.target.value)}
                     placeholder="https://example.com/audio.mp3"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500"
+                    className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500"
                   />
                 </div>
               </div>
@@ -223,7 +223,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
                   />
                   <label
                     htmlFor="admin-mp3-upload"
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer border border-slate-700"
+                    className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer border border-neutral-700"
                   >
                     <Upload size={14} /> PCからMP3ファイルを選択
                   </label>
@@ -231,7 +231,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
 
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition shadow-md"
+                  className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-xl text-xs transition shadow-md"
                 >
                   BGMを追加
                 </button>
@@ -239,35 +239,35 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
             </form>
 
             {/* 登録済みBGM一覧 ＆ 削除ボタン */}
-            <div className="bg-slate-950 rounded-3xl p-6 border border-slate-800 space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+            <div className="bg-black rounded-3xl p-6 border border-neutral-800 space-y-3">
+              <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-widest">
                 登録済みBGM音源（削除・試聴）
               </h3>
 
               <div className="space-y-2">
                 {bgmList.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-4">登録されているBGMはありません</p>
+                  <p className="text-xs text-neutral-500 text-center py-4">登録されているBGMはありません</p>
                 ) : (
                   bgmList.map((track) => (
-                    <div key={track.id} className="p-3 bg-slate-900 rounded-2xl border border-slate-800 flex items-center justify-between">
+                    <div key={track.id} className="p-3 bg-neutral-900 rounded-2xl border border-neutral-800 flex items-center justify-between">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <button
                           onClick={() => togglePreview(track)}
-                          className="p-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded-xl transition shrink-0"
+                          className="p-2 bg-sky-600/20 hover:bg-sky-600/40 text-sky-400 rounded-xl transition shrink-0"
                           title="試聴トグル"
                         >
                           {previewAudio && previewAudio.id === track.id ? <Pause size={16} /> : <Play size={16} />}
                         </button>
                         <div className="overflow-hidden">
                           <p className="text-xs font-bold text-white truncate">{track.name}</p>
-                          <p className="text-[10px] text-slate-500 font-mono truncate">{track.url}</p>
+                          <p className="text-[10px] text-neutral-500 font-mono truncate">{track.url}</p>
                         </div>
                       </div>
 
                       {/* 【管理者限定機能】BGM削除ボタン */}
                       <button
                         onClick={() => handleDeleteBgm(track.id, track.name)}
-                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition shrink-0 ml-2"
+                        className="p-2 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition shrink-0 ml-2"
                         title="このBGMを削除"
                       >
                         <Trash2 size={16} />

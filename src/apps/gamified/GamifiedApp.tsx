@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Flame, 
-  Trophy, 
   Zap, 
   Clock, 
   CheckSquare, 
@@ -23,6 +22,7 @@ import {
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
+import './GameStage.css';
 import GameStats from './GameStats';
 import { studyStreak } from './gameStatsUtils';
 import { trackEvent } from '../../lib/researchEvents';
@@ -382,435 +382,416 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getStageBackground = () => {
-    if (level < 3) return 'from-emerald-950 via-slate-900 to-slate-950 border-emerald-500/30';
-    if (level < 6) return 'from-amber-950 via-slate-900 to-slate-950 border-amber-500/30';
-    if (level < 10) return 'from-indigo-950 via-slate-900 to-slate-950 border-indigo-500/30';
-    return 'from-purple-950 via-fuchsia-950 to-slate-950 border-purple-500/30';
-  };
+  // 状態の見出し（画面上部のタイマーの上に出す）
+  const stageStatus = isActive
+    ? `冒険中… ${subject}`
+    : seconds > 0
+      ? '一時停止中（成果を記録できます）'
+      : 'キャンプで休憩中… 「学習開始」で冒険に出発！';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-28 md:pb-12 antialiased selection:bg-purple-600 selection:text-white">
-      
-      {/* ヘッダー情報 */}
-      <header className="sticky top-0 z-20 bg-slate-900/85 backdrop-blur-md border-b border-purple-900/40 p-4">
-        <div className="max-w-md md:max-w-6xl mx-auto space-y-2">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-xl shadow-lg shadow-purple-500/30">
-                <Trophy size={18} className="text-yellow-300" />
+    <div className="game-stage relative h-[100dvh] overflow-hidden bg-slate-950 text-slate-100 antialiased selection:bg-purple-600 selection:text-white">
+
+      {/* ===== 画面いっぱいのステージ（ほかのタブを開いている間も後ろで動き続ける） ===== */}
+      <div className="fixed inset-0 z-0 overflow-hidden" aria-hidden={activeTab !== 'timer'}>
+        <div className="game-world">
+          <div className="game-world-inner">
+            {/* 動く森の背景（学習中は景色が流れる） */}
+            <ForestBackground moving={isActive} />
+
+            {/* アバター描画：歩行の12コマ（walk_sheet.png）。足元を小道に合わせる。
+                --s は表示の倍率（スマホ 0.42、PC 0.5） */}
+            {isActive && (
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-[52px] z-10 [--s:0.42] md:[--s:0.5]">
+                <div
+                  role="img"
+                  aria-label="冒険者アバター歩行中"
+                  style={{
+                    width: `calc(${WALK_BOX.width}px * var(--s))`,
+                    height: `calc(${WALK_BOX.height}px * var(--s))`,
+                    backgroundImage: `url(${WALK_SHEET.src})`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundSize: `calc(${WALK_SHEET.width}px * var(--s)) calc(${WALK_SHEET.height}px * var(--s))`,
+                    backgroundPosition: `calc(${-WALK_FRAMES[(currentFrame - 1) % WALK_FRAME_COUNT][0]}px * var(--s)) calc(${-WALK_FRAMES[(currentFrame - 1) % WALK_FRAME_COUNT][1]}px * var(--s))`
+                  }}
+                />
               </div>
-              <span className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
-                LV.{level}
-              </span>
+            )}
+
+            {/* 休憩中はたき火でキャンプ */}
+            {!isActive && <CampScene characterSrc={sitUrl} showCaption={false} />}
+          </div>
+        </div>
+        <div className={`game-ground ${isActive ? '' : 'is-resting'}`} />
+      </div>
+
+      {/* ===== 上部の HUD（レベル・EXP・ライフ・連続日数） ===== */}
+      <header className="fixed top-0 inset-x-0 z-30 px-3 pt-3 pb-6 bg-gradient-to-b from-[#312117]/85 via-[#312117]/40 to-transparent">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+          <div className="game-glass rounded-2xl pl-1.5 pr-3 py-1.5 flex items-center gap-2 min-w-0">
+            <div className="w-9 h-9 shrink-0 rounded-xl bg-[#fdd69f] flex flex-col items-center justify-center shadow-lg shadow-black/30">
+              <span className="text-[7px] font-bold text-[#312117] leading-none">Lv.</span>
+              <span className="text-sm font-black text-[#312117] leading-none">{level}</span>
             </div>
-
-            {/* PC用ナビゲーションタブ */}
-            <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-slate-400">
-              <button onClick={() => setActiveTab('timer')} className={`hover:text-purple-400 transition ${activeTab === 'timer' ? 'text-purple-400 border-b-2 border-purple-400 pb-1' : ''}`}>冒険</button>
-              <button onClick={() => setActiveTab('todo')} className={`hover:text-purple-400 transition ${activeTab === 'todo' ? 'text-purple-400 border-b-2 border-purple-400 pb-1' : ''}`}>クエスト</button>
-              <button onClick={() => setActiveTab('stats')} className={`hover:text-purple-400 transition ${activeTab === 'stats' ? 'text-purple-400 border-b-2 border-purple-400 pb-1' : ''}`}>戦績</button>
-              <button onClick={() => setActiveTab('bgm')} className={`hover:text-purple-400 transition ${activeTab === 'bgm' ? 'text-purple-400 border-b-2 border-purple-400 pb-1' : ''}`}>BGM</button>
-              <button onClick={() => setActiveTab('profile')} className={`hover:text-purple-400 transition ${activeTab === 'profile' ? 'text-purple-400 border-b-2 border-purple-400 pb-1' : ''}`}>プレイヤー</button>
-            </nav>
-
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-red-950/50 border border-red-500/30 px-2.5 py-1 rounded-full text-xs font-bold text-red-400">
-                <Heart size={14} className="fill-red-500 text-red-500" />
-                <span>× {lifeTokens}</span>
+            <div className="w-28 md:w-40">
+              <div className="flex justify-between text-[9px] font-bold text-[#fdd69f]">
+                <span className="flex items-center gap-0.5"><Zap size={9} className="text-[#fdd69f]" /> EXP</span>
+                <span>{exp} / {maxExp}</span>
               </div>
-
-              <div className="flex items-center gap-1.5 bg-orange-950/50 border border-orange-500/30 px-3 py-1 rounded-full text-xs font-bold text-orange-400">
-                <Flame size={14} className="fill-orange-500 text-orange-500 animate-pulse" />
-                <span>{studyStreak(logs)} 日</span>
+              <div className="h-2 mt-0.5 w-full bg-[#312117] rounded-full overflow-hidden border border-[#fdd69f]/30">
+                <div
+                  className="h-full bg-[#fdd69f] rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, (exp / maxExp) * 100)}%` }}
+                />
               </div>
             </div>
           </div>
 
-          {/* 経験値ゲージ */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px] font-semibold text-slate-400">
-              <span className="flex items-center gap-1"><Zap size={10} className="text-yellow-400" /> EXP</span>
-              <span>{exp} / {maxExp}</span>
+          {/* PC用ナビゲーションタブ */}
+          <nav className="hidden md:flex game-glass rounded-full p-1 items-center gap-1 text-xs font-bold">
+            <button onClick={() => setActiveTab('timer')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'timer' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>冒険</button>
+            <button onClick={() => setActiveTab('todo')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'todo' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>クエスト</button>
+            <button onClick={() => setActiveTab('stats')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'stats' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>戦績</button>
+            <button onClick={() => setActiveTab('bgm')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'bgm' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>BGM</button>
+            <button onClick={() => setActiveTab('profile')} className={`px-3 py-1.5 rounded-full transition ${activeTab === 'profile' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>プレイヤー</button>
+          </nav>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="game-glass flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-[#fdd69f]">
+              <Heart size={14} className="fill-[#fdd69f] text-[#fdd69f]" />
+              <span>× {lifeTokens}</span>
             </div>
-            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
-              <div 
-                className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-400 rounded-full transition-all duration-300 shadow-sm"
-                style={{ width: `${Math.min(100, (exp / maxExp) * 100)}%` }}
-              />
+            <div className="game-glass flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-[#fdd69f]">
+              <Flame size={14} className="fill-[#fdd69f] text-[#fdd69f] animate-pulse" />
+              <span>{studyStreak(logs)} 日</span>
             </div>
           </div>
         </div>
       </header>
 
-      {/* メインコンテンツエリア */}
-      <main className="max-w-md md:max-w-6xl mx-auto p-4 space-y-6 pt-4">
-
-        {activeTab === 'timer' ? (
-          <div className="flex flex-col md:flex-row gap-6 items-stretch">
-            
-            {/* ステージ画面（アバター表示エリア） */}
-            <div className="w-full md:w-3/4 flex flex-col">
-              <div className={`flex-1 bg-gradient-to-b ${getStageBackground()} rounded-3xl p-5 shadow-xl border relative overflow-hidden flex flex-col items-center justify-center space-y-3`}>
-                
-                <div className="w-full flex-1 min-h-[320px] md:min-h-[420px] rounded-2xl border border-slate-800 relative overflow-hidden shadow-inner">
-                  {/* 動く森の背景（学習中は景色が流れる） */}
-                  <ForestBackground moving={isActive} />
-
-                  {/* アバター描画：歩行の12コマ（walk_sheet.png）。足元を小道に合わせる。
-                      --s は表示の倍率（スマホ 0.42、PC 0.5） */}
-                  {isActive && (
-                    <div className="absolute left-1/2 -translate-x-1/2 bottom-[52px] z-10 [--s:0.42] md:[--s:0.5]">
-                      <div
-                        role="img"
-                        aria-label="冒険者アバター歩行中"
-                        style={{
-                          width: `calc(${WALK_BOX.width}px * var(--s))`,
-                          height: `calc(${WALK_BOX.height}px * var(--s))`,
-                          backgroundImage: `url(${WALK_SHEET.src})`,
-                          backgroundRepeat: 'no-repeat',
-                          backgroundSize: `calc(${WALK_SHEET.width}px * var(--s)) calc(${WALK_SHEET.height}px * var(--s))`,
-                          backgroundPosition: `calc(${-WALK_FRAMES[(currentFrame - 1) % WALK_FRAME_COUNT][0]}px * var(--s)) calc(${-WALK_FRAMES[(currentFrame - 1) % WALK_FRAME_COUNT][1]}px * var(--s))`
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {/* 休憩中はたき火でキャンプ */}
-                  {!isActive && <CampScene characterSrc={sitUrl} />}
-                </div>
+      {activeTab === 'timer' ? (
+        <>
+          {/* ===== タイマー（空の部分に重ねる） ===== */}
+          <div className="fixed inset-x-0 top-[68px] md:top-[76px] z-20 px-4 flex flex-col items-center gap-2 pointer-events-none">
+            <div className="game-glass pointer-events-auto w-full max-w-sm rounded-3xl px-4 py-3 text-center shadow-2xl">
+              <p className="text-[10px] font-bold text-white flex items-center justify-center gap-1">
+                <Sparkles size={11} className="text-[#fdd69f]" /> {stageStatus}
+              </p>
+              <p className="game-digits font-mono font-black tracking-tight text-5xl md:text-6xl text-white mt-1">
+                {formatTime(seconds)}
+              </p>
+              <p className="text-[10px] text-white/85 mt-1 flex items-center justify-center gap-1">
+                <Zap size={10} className="text-[#fdd69f]" /> 1分 = +20 EXP ＋ クエスト達成で +50 EXP
+              </p>
+              {/* 教科選択 */}
+              <div className="flex justify-center flex-wrap gap-1.5 mt-2.5">
+                {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
+                  <button
+                    key={sub}
+                    onClick={() => setSubject(sub)}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition ${
+                      subject === sub
+                        ? 'bg-[#fdd69f] text-[#312117] border border-[#fdd69f]'
+                        : 'bg-[#312117]/70 text-white border border-[#fdd69f]/25 hover:bg-[#fdd69f]/10'
+                    }`}
+                  >
+                    {sub}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* タイマー＆コントロールパネル */}
-            <div className="w-full md:w-1/4 flex flex-col">
-              <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 text-center space-y-4 flex-1 flex flex-col justify-between">
-                <div>
-                  <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest flex items-center justify-center gap-1">
-                    <Sparkles size={12} /> 学習クエストタイマー
-                  </span>
+            {/* 一時停止中は成果メモと記録ボタン */}
+            {seconds > 0 && !isActive && (
+              <div className="game-glass pointer-events-auto w-full max-w-sm rounded-2xl p-2.5 flex gap-2 shadow-xl">
+                <input
+                  type="text"
+                  value={memo}
+                  onChange={(e) => setMemo(e.target.value)}
+                  placeholder="成果メモ（例: 漢字の復習）"
+                  className="flex-1 min-w-0 px-3 py-2 bg-[#312117] border border-[#fdd69f]/25 rounded-xl text-xs text-[#fdd69f] placeholder:text-[#fdd69f]/45 focus:outline-none focus:border-[#fdd69f]"
+                />
+                <button
+                  onClick={handleSaveLog}
+                  className="shrink-0 px-3 py-2 bg-[#fdd69f] hover:brightness-110 text-[#312117] font-bold rounded-xl text-xs transition shadow-lg shadow-black/30"
+                >
+                  記録してEXP獲得
+                </button>
+              </div>
+            )}
+          </div>
 
-                  {/* 教科選択 */}
-                  <div className="flex justify-center flex-wrap gap-1.5 mt-3">
-                    {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
-                      <button
-                        key={sub}
-                        onClick={() => setSubject(sub)}
-                        className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition ${
-                          subject === sub 
-                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/40 border border-purple-400' 
-                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                        }`}
-                      >
-                        {sub}
-                      </button>
-                    ))}
-                  </div>
+          {/* ===== 下部の操作ボタン（地面の上に乗せる） ===== */}
+          <div className="fixed inset-x-0 bottom-[76px] md:bottom-6 z-20 px-4 flex justify-center">
+            <div className="w-full max-w-sm flex gap-3">
+              <button
+                onClick={() => {
+                  trackEvent(isActive ? 'timer_pause' : 'timer_start', { label: subject, seconds });
+                  setIsActive(!isActive);
+                }}
+                className={`flex-1 h-14 rounded-2xl font-black text-base transition flex items-center justify-center gap-2 shadow-xl shadow-black/40 border-2 ${
+                  isActive
+                    ? 'bg-[#312117] text-[#fdd69f] border-[#fdd69f]/70 hover:bg-[#3f2b1e]'
+                    : 'bg-[#fdd69f] text-[#312117] border-[#fdd69f] hover:brightness-110'
+                }`}
+              >
+                {isActive ? <Pause size={20} /> : <Play size={20} />}
+                {isActive ? '一時停止' : seconds > 0 ? '冒険を再開' : '学習開始'}
+              </button>
+              <button
+                onClick={() => {
+                  if (seconds > 0) trackEvent('timer_reset', { label: subject, seconds });
+                  setIsActive(false);
+                  setSeconds(0);
+                  sessionStartRef.current = null;
+                }}
+                className="game-glass w-14 h-14 shrink-0 rounded-2xl text-[#fdd69f] hover:bg-[#fdd69f]/10 transition flex items-center justify-center"
+                title="リセット"
+                aria-label="リセット"
+              >
+                <RotateCcw size={18} />
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ===== ほかのタブはステージの上に開くメニュー ===== */
+        <div className="fixed inset-0 z-20 overflow-y-auto bg-[#312117]/75 backdrop-blur-[3px]">
+          <main className="max-w-md md:max-w-4xl mx-auto px-4 pt-20 md:pt-24 pb-28 md:pb-10">
+                {/* クエストタブ */}
+                {activeTab === 'todo' && (
+                  <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h2 className="text-base font-bold text-white flex items-center gap-2 whitespace-nowrap shrink-0">
+                        <CheckSquare size={18} className="text-[#fdd69f]" /> クエストボード
+                      </h2>
+                      <span className="text-[10px] text-white bg-[#4a3424]/60 border border-[#fdd69f]/30 px-2.5 py-1 rounded-full">
+                        同一教科の目標時間達成で自動クリア (+50 EXP)
+                      </span>
+                    </div>
 
-                  {/* タイムディスプレイ */}
-                  <div className="py-6 bg-slate-950/80 rounded-2xl border border-purple-500/30 flex flex-col items-center justify-center shadow-inner relative overflow-hidden mt-4">
-                    <div className="absolute inset-0 bg-purple-600/5 blur-3xl rounded-full" />
-                    <span className="text-4xl md:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-300 font-mono z-10">
-                      {formatTime(seconds)}
-                    </span>
-                    <p className="text-[10px] text-purple-400/80 mt-2 font-medium z-10 flex items-center gap-1">
-                      <Zap size={10} className="text-yellow-400" /> 1分 = +20 EXP ＋ クエスト達成で +50 EXP
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        trackEvent(isActive ? 'timer_pause' : 'timer_start', { label: subject, seconds });
-                        setIsActive(!isActive);
-                      }}
-                      className={`flex-1 py-3.5 rounded-2xl font-black text-white transition flex items-center justify-center gap-2 shadow-lg text-xs ${
-                        isActive 
-                          ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/30' 
-                          : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 shadow-purple-600/40'
-                      }`}
-                    >
-                      {isActive ? <Pause size={16} /> : <Play size={16} />}
-                      {isActive ? '一時停止' : '学習開始'}
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        if (seconds > 0) trackEvent('timer_reset', { label: subject, seconds });
-                        setIsActive(false);
-                        setSeconds(0);
-                        sessionStartRef.current = null;
-                      }}
-                      className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl transition border border-slate-700"
-                      title="リセット"
-                    >
-                      <RotateCcw size={16} />
-                    </button>
-                  </div>
-
-                  {seconds > 0 && !isActive && (
-                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <form onSubmit={handleAddTask} className="bg-[#1f140d]/80 p-3.5 rounded-2xl border border-[#fdd69f]/15 space-y-3">
+                      <p className="text-xs font-bold text-white flex items-center gap-1">
+                        <Plus size={14} /> 新しいクエストを作成
+                      </p>
+                  
                       <input
                         type="text"
-                        value={memo}
-                        onChange={(e) => setMemo(e.target.value)}
-                        placeholder="成果メモ（例: 漢字の復習）"
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        placeholder="クエスト名（例: 数学の基礎固め）"
+                        className="w-full px-3.5 py-2.5 bg-[#312117] border border-[#fdd69f]/15 rounded-xl text-xs text-white focus:outline-none focus:border-[#fdd69f]/30"
                       />
-                      <button
-                        onClick={handleSaveLog}
-                        className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-600/30"
-                      >
-                        成果を記録してEXP獲得
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
 
-          </div>
-        ) : (
-          <div className="w-full">
-            
-            {/* クエストタブ */}
-            {activeTab === 'todo' && (
-              <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-4">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <CheckSquare size={18} className="text-purple-400" /> クエストボード
-                  </h2>
-                  <span className="text-[10px] text-purple-400 bg-purple-950/60 border border-purple-500/30 px-2.5 py-1 rounded-full">
-                    同一教科の目標時間達成で自動クリア (+50 EXP)
-                  </span>
-                </div>
+                      <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+                        <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                          <span className="text-[10px] text-white/65 font-bold shrink-0">教科:</span>
+                          {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => setNewTaskSubject(sub)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition shrink-0 ${
+                                newTaskSubject === sub 
+                                  ? 'bg-[#fdd69f] text-[#312117] border border-[#fdd69f]' 
+                                  : 'bg-[#312117] text-white/65 border border-[#fdd69f]/15 hover:bg-[#4a3424]'
+                              }`}
+                            >
+                              {sub}
+                            </button>
+                          ))}
+                        </div>
 
-                <form onSubmit={handleAddTask} className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-3">
-                  <p className="text-xs font-bold text-purple-300 flex items-center gap-1">
-                    <Plus size={14} /> 新しいクエストを作成
-                  </p>
-                  
-                  <input
-                    type="text"
-                    value={newTaskTitle}
-                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                    placeholder="クエスト名（例: 数学の基礎固め）"
-                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500"
-                  />
+                        <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                          <span className="text-[10px] text-white/65 font-bold shrink-0">目標時間(分):</span>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={newTaskMinutes}
+                            onChange={(e) => setNewTaskMinutes(Number(e.target.value))}
+                            className="w-20 px-2.5 py-1.5 bg-[#312117] border border-[#fdd69f]/15 rounded-xl text-xs text-white text-center focus:outline-none focus:border-[#fdd69f]/30"
+                          />
+                          <button
+                            type="submit"
+                            className="px-4 py-2 bg-[#fdd69f] text-[#312117] rounded-xl hover:bg-[#ffe3b8] transition shadow-md shadow-black/30 text-xs font-bold shrink-0"
+                          >
+                            追加
+                          </button>
+                        </div>
+                      </div>
+                    </form>
 
-                  <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
-                    <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-                      <span className="text-[10px] text-slate-400 font-bold shrink-0">教科:</span>
-                      {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
-                        <button
-                          key={sub}
-                          type="button"
-                          onClick={() => setNewTaskSubject(sub)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition shrink-0 ${
-                            newTaskSubject === sub 
-                              ? 'bg-purple-600 text-white border border-purple-400' 
-                              : 'bg-slate-900 text-slate-400 border border-slate-800 hover:bg-slate-800'
+                    <div className="space-y-2 pt-2">
+                      {tasks.map((task) => (
+                        <div 
+                          key={task.id} 
+                          className={`flex items-center justify-between p-3.5 rounded-xl border ${
+                            task.completed 
+                              ? 'bg-emerald-950/20 border-emerald-500/30' 
+                              : 'bg-[#4a3424]/20 border-[#fdd69f]/30'
                           }`}
                         >
-                          {sub}
+                          <div className="flex items-center gap-3 text-xs flex-1">
+                            <input
+                              type="checkbox"
+                              checked={task.completed}
+                              disabled={true}
+                              className="w-4 h-4 rounded text-[#312117] focus:ring-[#fdd69f] bg-[#312117] border-[#fdd69f]/25 opacity-75 cursor-not-allowed"
+                            />
+                            <div className="flex flex-col gap-0.5">
+                              <span className={task.completed ? 'line-through text-white/50' : 'text-white font-semibold'}>
+                                {task.title}
+                              </span>
+                              <div className="flex items-center gap-2 text-[10px]">
+                                {task.subject && (
+                                  <span className="text-white bg-[#4a3424]/80 px-1.5 py-0.5 rounded border border-[#fdd69f]/30">
+                                    教科: {task.subject}
+                                  </span>
+                                )}
+                                {task.targetMinutes !== undefined && (
+                                  <span className="text-white/65 bg-[#312117] px-1.5 py-0.5 rounded border border-[#fdd69f]/15">
+                                    目標: {task.targetMinutes}分以上
+                                  </span>
+                                )}
+                                <span className="text-white">※自動判定</span>
+                              </div>
+                            </div>
+                          </div>
+                      
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-yellow-400 font-bold bg-yellow-400/10 border border-yellow-400/20 px-2 py-0.5 rounded-full">
+                              +50 EXP
+                            </span>
+                            <button
+                              onClick={() => deleteTask(task.id)}
+                              className="text-white/50 hover:text-red-400 transition"
+                              title="削除"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 戦績タブ */}
+                {activeTab === 'stats' && (
+                  <GameStats level={level} exp={exp} maxExp={maxExp} lifeTokens={lifeTokens} logs={logs} tasks={tasks} />
+                )}
+
+                {/* BGMタブ */}
+                {activeTab === 'bgm' && (
+                  <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4 text-center">
+                    <h2 className="text-base font-bold text-white flex items-center justify-center gap-2">
+                      <Music size={18} className="text-[#fdd69f]" /> ゾーン突入 BGM
+                    </h2>
+                    <p className="text-xs text-white/65">冒険の没入感を極限まで高めます</p>
+
+                    <div className="grid grid-cols-3 gap-2 pt-2">
+                      {[
+                        { id: 'cyber', label: 'サイバー ⚡' },
+                        { id: 'lofi', label: 'Lo-Fi 🎧' },
+                        { id: 'rain', label: 'ディープ雨 🌧️' },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => selectBgm(item.id as 'cyber' | 'lofi' | 'rain')}
+                          className={`py-3 px-2 rounded-2xl text-xs font-bold transition border ${
+                            bgmType === item.id 
+                              ? 'bg-[#fdd69f] text-[#312117] border-[#fdd69f] shadow-lg shadow-black/30' 
+                              : 'bg-[#1f140d] text-white/65 border-[#fdd69f]/15 hover:bg-[#4a3424]'
+                          }`}
+                        >
+                          {item.label}
                         </button>
                       ))}
                     </div>
 
-                    <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-                      <span className="text-[10px] text-slate-400 font-bold shrink-0">目標時間(分):</span>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={newTaskMinutes}
-                        onChange={(e) => setNewTaskMinutes(Number(e.target.value))}
-                        className="w-20 px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 text-center focus:outline-none focus:border-purple-500"
-                      />
+                    <button
+                      onClick={toggleBgm}
+                      className={`w-full py-3.5 rounded-2xl font-black transition flex items-center justify-center gap-2 shadow-lg ${
+                        isPlayingBgm ? 'bg-[#4a3424] text-white border border-[#fdd69f]/60 hover:bg-[#5a4030]' : 'bg-[#fdd69f] text-[#312117] hover:bg-[#ffe3b8]'
+                      }`}
+                    >
+                      {isPlayingBgm ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                      {isPlayingBgm ? 'サウンド停止' : 'ゾーンBGM再生'}
+                    </button>
+                  </div>
+                )}
+
+                {/* プレイヤープロファイルタブ */}
+                {activeTab === 'profile' && (
+                  <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <User size={18} className="text-[#fdd69f]" /> 冒険者プロファイル
+                    </h2>
+
+                    <div className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-white/50">プレイヤー名:</span>
+                        <span className="font-bold text-white">{user ? user.displayName || 'ログイン中' : 'ゲスト冒険者'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-white/50">参加者ID:</span>
+                        <span className="font-mono font-bold text-white">{getParticipantId() || '未入力'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-white/50">アカウントID:</span>
+                        <span className="font-mono text-white/65">{user ? user.uid : 'anonymous'}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-2">
                       <button
-                        type="submit"
-                        className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-500 transition shadow-md shadow-purple-600/30 text-xs font-bold shrink-0"
+                        onClick={() => {
+                          if (isActive) {
+                            alert('計測中はモードを変更できません。一度一時停止してください。');
+                            return;
+                          }
+                          onResetMode?.();
+                        }}
+                        className="w-full py-3 bg-[#1f140d] hover:bg-[#4a3424] text-white font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-[#fdd69f]/15"
                       >
-                        追加
+                        <RefreshCw size={16} />
+                        モードを再選択する（スタート画面へ）
+                      </button>
+
+                      <button
+                        onClick={() => onOpenAdmin?.()}
+                        className="w-full py-3 bg-[#4a3424]/60 hover:bg-[#4a3424] text-white font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-[#fdd69f]/50"
+                      >
+                        <Lock size={16} />
+                        管理者用分析ページ（管理者アカウント限定）
                       </button>
                     </div>
                   </div>
-                </form>
+                )}
 
-                <div className="space-y-2 pt-2">
-                  {tasks.map((task) => (
-                    <div 
-                      key={task.id} 
-                      className={`flex items-center justify-between p-3.5 rounded-xl border ${
-                        task.completed 
-                          ? 'bg-emerald-950/20 border-emerald-500/30' 
-                          : 'bg-purple-950/20 border-purple-500/30'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 text-xs flex-1">
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          disabled={true}
-                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-900 border-slate-700 opacity-75 cursor-not-allowed"
-                        />
-                        <div className="flex flex-col gap-0.5">
-                          <span className={task.completed ? 'line-through text-slate-500' : 'text-slate-200 font-semibold'}>
-                            {task.title}
-                          </span>
-                          <div className="flex items-center gap-2 text-[10px]">
-                            {task.subject && (
-                              <span className="text-purple-300 bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-500/30">
-                                教科: {task.subject}
-                              </span>
-                            )}
-                            {task.targetMinutes !== undefined && (
-                              <span className="text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                                目標: {task.targetMinutes}分以上
-                              </span>
-                            )}
-                            <span className="text-purple-400">※自動判定</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-yellow-400 font-bold bg-yellow-400/10 border border-yellow-400/20 px-2 py-0.5 rounded-full">
-                          +50 EXP
-                        </span>
-                        <button
-                          onClick={() => deleteTask(task.id)}
-                          className="text-slate-500 hover:text-red-400 transition"
-                          title="削除"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 戦績タブ */}
-            {activeTab === 'stats' && (
-              <GameStats level={level} exp={exp} maxExp={maxExp} lifeTokens={lifeTokens} logs={logs} tasks={tasks} />
-            )}
-
-            {/* BGMタブ */}
-            {activeTab === 'bgm' && (
-              <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-4 text-center">
-                <h2 className="text-base font-bold text-slate-100 flex items-center justify-center gap-2">
-                  <Music size={18} className="text-purple-400" /> ゾーン突入 BGM
-                </h2>
-                <p className="text-xs text-slate-400">冒険の没入感を極限まで高めます</p>
-
-                <div className="grid grid-cols-3 gap-2 pt-2">
-                  {[
-                    { id: 'cyber', label: 'サイバー ⚡' },
-                    { id: 'lofi', label: 'Lo-Fi 🎧' },
-                    { id: 'rain', label: 'ディープ雨 🌧️' },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => selectBgm(item.id as 'cyber' | 'lofi' | 'rain')}
-                      className={`py-3 px-2 rounded-2xl text-xs font-bold transition border ${
-                        bgmType === item.id 
-                          ? 'bg-purple-600 text-white border-purple-400 shadow-lg shadow-purple-600/30' 
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={toggleBgm}
-                  className={`w-full py-3.5 rounded-2xl font-black text-white transition flex items-center justify-center gap-2 shadow-lg ${
-                    isPlayingBgm ? 'bg-amber-600 hover:bg-amber-500' : 'bg-purple-600 hover:bg-purple-500'
-                  }`}
-                >
-                  {isPlayingBgm ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                  {isPlayingBgm ? 'サウンド停止' : 'ゾーンBGM再生'}
-                </button>
-              </div>
-            )}
-
-            {/* プレイヤープロファイルタブ */}
-            {activeTab === 'profile' && (
-              <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-4">
-                <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <User size={18} className="text-purple-400" /> 冒険者プロファイル
-                </h2>
-
-                <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">プレイヤー名:</span>
-                    <span className="font-bold text-slate-200">{user ? user.displayName || 'ログイン中' : 'ゲスト冒険者'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">参加者ID:</span>
-                    <span className="font-mono font-bold text-slate-200">{getParticipantId() || '未入力'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">アカウントID:</span>
-                    <span className="font-mono text-slate-400">{user ? user.uid : 'anonymous'}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <button
-                    onClick={() => {
-                      if (isActive) {
-                        alert('計測中はモードを変更できません。一度一時停止してください。');
-                        return;
-                      }
-                      onResetMode?.();
-                    }}
-                    className="w-full py-3 bg-slate-950 hover:bg-slate-800 text-slate-200 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-slate-800"
-                  >
-                    <RefreshCw size={16} />
-                    モードを再選択する（スタート画面へ）
-                  </button>
-
-                  <button
-                    onClick={() => onOpenAdmin?.()}
-                    className="w-full py-3 bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-purple-800/50"
-                  >
-                    <Lock size={16} />
-                    管理者用分析ページ（管理者アカウント限定）
-                  </button>
-                </div>
-              </div>
-            )}
-
-          </div>
-        )}
-
-      </main>
+          </main>
+        </div>
+      )}
 
       {/* モバイル用ボトムナビゲーション */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-md border-t border-purple-900/40 p-2 flex justify-around items-center z-30">
-        <button onClick={() => setActiveTab('timer')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'timer' ? 'text-purple-400' : 'text-slate-400'}`}>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#312117]/90 backdrop-blur-md border-t border-[#fdd69f]/20 p-2 flex justify-around items-center z-30">
+        <button onClick={() => setActiveTab('timer')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'timer' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <Sparkles size={16} /> <span>冒険</span>
         </button>
-        <button onClick={() => setActiveTab('todo')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'todo' ? 'text-purple-400' : 'text-slate-400'}`}>
+        <button onClick={() => setActiveTab('todo')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'todo' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <CheckSquare size={16} /> <span>クエスト</span>
         </button>
-        <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'stats' ? 'text-purple-400' : 'text-slate-400'}`}>
+        <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'stats' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <BarChart2 size={16} /> <span>戦績</span>
         </button>
-        <button onClick={() => setActiveTab('bgm')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'bgm' ? 'text-purple-400' : 'text-slate-400'}`}>
+        <button onClick={() => setActiveTab('bgm')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'bgm' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <Music size={16} /> <span>BGM</span>
         </button>
-        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'profile' ? 'text-purple-400' : 'text-slate-400'}`}>
+        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center gap-1 p-2 text-[10px] font-bold ${activeTab === 'profile' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <User size={16} /> <span>プレイヤー</span>
         </button>
       </nav>
-
     </div>
   );
 };

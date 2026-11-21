@@ -16,7 +16,7 @@ export default function OfflineBadge() {
   };
 
   return (
-    <div className="fixed bottom-20 right-3 md:bottom-4 z-[9999] text-xs font-bold select-none">
+    <div className="fixed bottom-36 right-3 md:bottom-4 z-[9999] text-xs font-bold select-none">
       {open && (
         <div className="mb-2 w-60 rounded-xl bg-white text-gray-800 shadow-xl border border-gray-200 p-3 space-y-2 font-normal">
           <p className="font-bold">オフライン版（確認・デモ用）</p>

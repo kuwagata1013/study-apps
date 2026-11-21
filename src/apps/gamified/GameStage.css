@@ -1,0 +1,80 @@
+/* ゲーム版：画面いっぱいのステージ（GamifiedApp.tsx）
+   上半分〜中ほどに森の景色、下の --ground の高さぶんは地面（その上に操作ボタンが乗る） */
+
+.game-stage {
+  --ground: 150px;
+}
+@media (min-width: 768px) {
+  .game-stage {
+    --ground: 110px;
+  }
+}
+
+.game-world {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: var(--ground);
+  overflow: hidden;
+}
+
+/* 大きな画面ではドット絵ごと拡大して、景色とキャラクターを大きく見せる */
+.game-world-inner {
+  position: absolute;
+  inset: 0;
+}
+@media (min-width: 1024px) and (min-height: 700px) {
+  .game-world-inner {
+    zoom: 1.25;
+  }
+}
+@media (min-width: 1440px) and (min-height: 850px) {
+  .game-world-inner {
+    zoom: 1.5;
+  }
+}
+
+/* 地面：近景の草地の色から下に向かって暗くする。ドット風の草の粒を散らす */
+.game-ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--ground);
+  background-color: #2f6f2d;
+  background-image:
+    linear-gradient(180deg, rgba(63, 138, 58, 1) 0%, rgba(63, 138, 58, 0) 35%, rgba(15, 35, 18, 0.55) 100%),
+    radial-gradient(#4f9a3e 1.5px, transparent 1.6px),
+    radial-gradient(#2a5e28 1.5px, transparent 1.6px);
+  background-size: 100% 100%, 24px 24px, 32px 32px;
+  background-position: 0 0, 0 6px, 12px 16px;
+  image-rendering: pixelated;
+}
+
+/* 休憩中は景色に合わせて夕暮れ色に */
+.game-ground::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(40, 30, 60, 0.32);
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+.game-ground.is-resting::after {
+  opacity: 1;
+}
+
+/* 景色の上に重ねる半透明のパネル */
+.game-glass {
+  background: rgba(49, 33, 23, 0.82); /* #312117 */
+  color: #fdd69f;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(253, 214, 159, 0.28);
+}
+
+/* 明るい空の上でも読めるよう、数字に影を付ける */
+.game-digits {
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), 0 0 18px rgba(253, 214, 159, 0.35);
+}

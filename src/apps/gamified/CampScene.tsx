@@ -147,9 +147,11 @@ const SPARKS = [0, 1, 2, 3, 4];
 
 interface CampSceneProps {
   characterSrc: string;
+  // 上に案内文を出すか（全画面表示では画面の上に別の表示があるので出さない）
+  showCaption?: boolean;
 }
 
-export const CampScene: React.FC<CampSceneProps> = ({ characterSrc }) => (
+export const CampScene: React.FC<CampSceneProps> = ({ characterSrc, showCaption = true }) => (
   <div className="camp-scene" aria-label="キャンプで休憩中">
     <div className="camp-glow" />
 
@@ -177,7 +179,7 @@ export const CampScene: React.FC<CampSceneProps> = ({ characterSrc }) => (
     {/* たき火のほうを向いて休むキャラクター */}
     <img src={characterSrc} alt="たき火で休憩する冒険者" className="camp-character" />
 
-    <p className="camp-caption">キャンプで休憩中… 「学習開始」で冒険に出発！</p>
+    {showCaption && <p className="camp-caption">キャンプで休憩中… 「学習開始」で冒険に出発！</p>}
   </div>
 );
 
