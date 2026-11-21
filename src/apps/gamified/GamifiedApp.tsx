@@ -28,7 +28,7 @@ import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
 import QuestCalendar from './QuestCalendar';
 import { AccountIdCopy, FriendsPanel, PlayerNameEditor } from './FriendsPanel';
-import { savePlayerStats } from '../../lib/players';
+import { countIncomingRequests, savePlayerStats } from '../../lib/players';
 import './GameStage.css';
 import GameStats from './GameStats';
 import {
@@ -111,6 +111,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 }) => {
   // 1. タブ管理
   const [activeTab, setActiveTab] = useState<'timer' | 'todo' | 'stats' | 'bgm' | 'friends' | 'profile'>('timer');
+  // 届いているフレンド申請の数（フレンドタブに印を付ける）
+  const [friendRequestCount, setFriendRequestCount] = useState(0);
 
   // 2. ゲーミフィケーション・ステート
   const [level, setLevel] = useState(1);
@@ -519,6 +521,19 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     }, 1500);
     return () => clearTimeout(t);
   }, [uid, playerName, level, streakDays, todayMinutes]);
+
+  const hasFriendRequests = !!uid && friendRequestCount > 0;
+  // 届いているフレンド申請の数（開いたときに一度だけ確かめる。フレンドタブを開くと最新になる）
+  useEffect(() => {
+    if (!uid) return;
+    let cancelled = false;
+    countIncomingRequests(uid)
+      .then((n) => !cancelled && setFriendRequestCount(n))
+      .catch((e) => console.error('フレンド申請の確認に失敗:', e));
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
   const bonusPercent = Math.round(streakBonusRate(streakUntilYesterday(logs, protectedDays)) * 100);
   const focusAchieved = Math.max(bestRun, runSeconds) >= FOCUS_BONUS_SECONDS;
 
@@ -590,7 +605,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
             <button onClick={() => setActiveTab('todo')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'todo' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>クエスト</button>
             <button onClick={() => setActiveTab('stats')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'stats' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>戦績</button>
             <button onClick={() => setActiveTab('bgm')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'bgm' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>BGM</button>
-            <button onClick={() => setActiveTab('friends')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'friends' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>フレンド</button>
+            <button onClick={() => setActiveTab('friends')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'friends' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>
+              フレンド
+              {hasFriendRequests && <span className="ml-1 inline-block w-2 h-2 rounded-full bg-red-500 align-middle" aria-label="フレンド申請あり" />}
+            </button>
             <button onClick={() => setActiveTab('profile')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'profile' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>プロフィール</button>
           </nav>
 
@@ -950,7 +968,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                 )}
 
                 {/* フレンドタブ */}
-                {activeTab === 'friends' && <FriendsPanel uid={uid} />}
+                {activeTab === 'friends' && <FriendsPanel uid={uid} onIncomingCount={setFriendRequestCount} />}
 
                 {/* プロフィールタブ */}
                 {activeTab === 'profile' && (
@@ -1048,7 +1066,11 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
           <Music size={16} /> <span>BGM</span>
         </button>
         <button onClick={() => setActiveTab('friends')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'friends' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
-          <Users size={16} /> <span>フレンド</span>
+          <span className="relative">
+            <Users size={16} />
+            {hasFriendRequests && <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500" aria-label="フレンド申請あり" />}
+          </span>
+          <span>フレンド</span>
         </button>
         <button onClick={() => setActiveTab('profile')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'profile' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <User size={16} /> <span>プロフィール</span>

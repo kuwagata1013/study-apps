@@ -109,15 +109,25 @@ service cloud.firestore {
         && isValidPlayer(request.resource.data);
       allow delete: if request.auth != null && request.auth.uid == uid;
 
-      // 自分のフレンド一覧（相手のアカウントIDをドキュメントIDにする）。本人だけ読み書きできる
+      // 自分のフレンド一覧（相手のアカウントIDをドキュメントIDにする）。読めるのは本人だけ
+      // フレンドになるのは申請を承認したときだけ。承認した人が、自分の一覧と申請した人の一覧の両方に書く
+      // 外すときはどちらからでも両方の一覧から消せる
       match /friends/{friendId} {
-        allow read, delete: if request.auth != null && request.auth.uid == uid;
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow delete: if request.auth != null && (request.auth.uid == uid || request.auth.uid == friendId);
         allow update: if false;
-        allow create: if request.auth != null && request.auth.uid == uid
+        allow create: if request.auth != null
           && friendId != uid
-          && exists(/databases/$(database)/documents/players/$(friendId))
           && request.resource.data.keys().hasOnly(['addedAt'])
-          && request.resource.data.addedAt == request.time;
+          && request.resource.data.addedAt == request.time
+          && (
+            // 承認する人が、申請してきた人を自分の一覧に入れる
+            (request.auth.uid == uid
+              && exists(/databases/$(database)/documents/friendRequests/$(friendId + '_' + uid)))
+            // 承認する人が、申請してきた人の一覧に自分を入れる
+            || (request.auth.uid == friendId
+              && exists(/databases/$(database)/documents/friendRequests/$(uid + '_' + friendId)))
+          );
       }
     }
 
@@ -147,6 +157,23 @@ service cloud.firestore {
         && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 20
         && request.resource.data.updatedAt == request.time;
       allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    // フレンド申請（ドキュメントIDは「申請した人のID_相手のID」）
+    // 読めるのは申請した人と相手だけ。承認・拒否・取り消しで消す。書き換えは不可
+    match /friendRequests/{requestId} {
+      allow read, delete: if request.auth != null
+        && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+      allow update: if false;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['from', 'to', 'createdAt'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to is string
+        && request.resource.data.to != request.auth.uid
+        && requestId == request.auth.uid + '_' + request.resource.data.to
+        && request.resource.data.createdAt == request.time
+        && exists(/databases/$(database)/documents/players/$(request.resource.data.to))
+        && !exists(/databases/$(database)/documents/players/$(request.auth.uid)/friends/$(request.resource.data.to));
     }
 
     // それ以外はすべて拒否

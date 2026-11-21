@@ -124,7 +124,31 @@ export const deleteDoc = async (ref: DocumentReference) => {
   save(ref.parent, docs);
 };
 
-type Constraint = { kind: 'orderBy'; field: string; dir: 'asc' | 'desc' } | { kind: 'limit'; n: number };
+// まとめて書き込む（オフライン版では順に書くだけ）
+export const writeBatch = (_db: Db) => {
+  const ops: (() => Promise<void>)[] = [];
+  const batch = {
+    set: (ref: DocumentReference, data: Record<string, unknown>, options?: { merge?: boolean }) => {
+      ops.push(() => setDoc(ref, data, options));
+      return batch;
+    },
+    delete: (ref: DocumentReference) => {
+      ops.push(() => deleteDoc(ref));
+      return batch;
+    },
+    commit: async () => {
+      for (const op of ops) await op();
+    }
+  };
+  return batch;
+};
+
+type Constraint =
+  | { kind: 'orderBy'; field: string; dir: 'asc' | 'desc' }
+  | { kind: 'limit'; n: number }
+  | { kind: 'where'; field: string; value: unknown };
+// where は「==」だけに対応
+export const where = (field: string, _op: '==', value: unknown): Constraint => ({ kind: 'where', field, value });
 export const orderBy = (field: string, dir: 'asc' | 'desc' = 'asc'): Constraint => ({ kind: 'orderBy', field, dir });
 export const limit = (n: number): Constraint => ({ kind: 'limit', n });
 
@@ -148,6 +172,9 @@ const sortKey = (v: unknown): number | string => {
 export const getDocs = async (ref: CollectionReference | Query) => {
   let entries = Object.entries(load(ref.path));
   const constraints = ref.type === 'query' ? ref.constraints : [];
+  for (const c of constraints) {
+    if (c.kind === 'where') entries = entries.filter(([, d]) => d[c.field] === c.value);
+  }
   for (const c of [...constraints].reverse()) {
     if (c.kind !== 'orderBy') continue;
     entries = [...entries].sort((a, b) => {

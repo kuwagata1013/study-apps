@@ -1,9 +1,10 @@
 // プレイヤー名とフレンド機能
 // - players/{uid}: 公開プロフィール（名前・レベル・称号・連続日数）。アカウントIDを知っている人だけが読める
 // - playerNames/{名前のキー}: 名前 → アカウントID。名前は1人1つの早い者勝ち。名前を知っている人だけが引ける
-// - players/{uid}/friends/{相手のuid}: 自分のフレンド一覧（本人だけが読み書き）
+// - players/{uid}/friends/{相手のuid}: 自分のフレンド一覧（読めるのは本人だけ）
+// - friendRequests/{申請した人のuid}_{相手のuid}: フレンド申請。相手が承認するとお互いの一覧に入る
 // Google アカウントの名前は使わない。ログイン後に本人が決めた名前だけを使う
-import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 
 export const MAX_NAME_LENGTH = 20;
@@ -168,24 +169,81 @@ const findUidByName = async (name: string): Promise<string | null> => {
   return d.name === normalizeName(name) ? (d.uid ?? null) : null;
 };
 
-export type AddFriendResult = 'added' | 'self' | 'invalid' | 'not_found' | 'already' | 'full';
+// ===== フレンド申請 =====
+const requestRef = (from: string, to: string) => doc(db, 'friendRequests', `${from}_${to}`);
 
-// プレイヤー名かアカウントIDで追加する（名前を先に探し、なければIDとして探す）
-export const addFriend = async (myUid: string, nameOrId: string, currentIds: string[]): Promise<AddFriendResult> => {
+const fetchPlayers = async (ids: string[]) =>
+  (await Promise.all(ids.map((id) => fetchPlayer(id).catch(() => null)))).filter((p): p is PlayerProfile => p !== null);
+
+// 届いた申請（incoming）と送った申請（outgoing）。相手のプロフィール付き
+export const fetchFriendRequests = async (uid: string): Promise<{ incoming: PlayerProfile[]; outgoing: PlayerProfile[] }> => {
+  const col = collection(db, 'friendRequests');
+  const [inc, out] = await Promise.all([getDocs(query(col, where('to', '==', uid))), getDocs(query(col, where('from', '==', uid)))]);
+  const [incoming, outgoing] = await Promise.all([
+    fetchPlayers(inc.docs.map((d) => (d.data() as { from: string }).from)),
+    fetchPlayers(out.docs.map((d) => (d.data() as { to: string }).to))
+  ]);
+  return { incoming, outgoing };
+};
+
+// 届いた申請の数（タブの印に使う）
+export const countIncomingRequests = async (uid: string) =>
+  (await getDocs(query(collection(db, 'friendRequests'), where('to', '==', uid)))).size;
+
+export interface FriendState {
+  friendIds: string[];
+  incomingIds: string[];
+  outgoingIds: string[];
+}
+
+// 申請を承認する：お互いのフレンド一覧に入れて、申請を消す（まとめて書くので、途中で失敗しても片方だけにはならない）
+export const acceptFriendRequest = async (myUid: string, fromUid: string, state: FriendState) => {
+  const batch = writeBatch(db);
+  // 以前の版で自分の一覧にだけ入っている相手なら、自分の側は書かない（書き換えはできないため）
+  if (!state.friendIds.includes(fromUid)) batch.set(doc(db, 'players', myUid, 'friends', fromUid), { addedAt: serverTimestamp() });
+  batch.set(doc(db, 'players', fromUid, 'friends', myUid), { addedAt: serverTimestamp() });
+  batch.delete(requestRef(fromUid, myUid));
+  // 自分からも申請していたら、それも消す
+  if (state.outgoingIds.includes(fromUid)) batch.delete(requestRef(myUid, fromUid));
+  await batch.commit();
+};
+
+export const declineFriendRequest = async (myUid: string, fromUid: string) => {
+  await deleteDoc(requestRef(fromUid, myUid));
+};
+
+export const cancelFriendRequest = async (myUid: string, toUid: string) => {
+  await deleteDoc(requestRef(myUid, toUid));
+};
+
+export type SendRequestResult = 'sent' | 'accepted' | 'self' | 'invalid' | 'not_found' | 'already' | 'pending' | 'full';
+
+// プレイヤー名かアカウントIDで申請する（名前を先に探し、なければIDとして探す）
+// 相手からすでに申請が届いていれば、それを承認してフレンドになる
+export const sendFriendRequest = async (myUid: string, nameOrId: string, state: FriendState): Promise<SendRequestResult> => {
   const text = nameOrId.trim();
   if (!normalizeName(text)) return 'invalid';
   const byName = await findUidByName(text);
   const id = byName ?? text;
   if (!byName && !isValidAccountId(id)) return 'not_found';
   if (id === myUid) return 'self';
-  if (currentIds.includes(id)) return 'already';
-  if (currentIds.length >= MAX_FRIENDS) return 'full';
+  if (state.friendIds.includes(id)) return 'already';
+  if (state.outgoingIds.includes(id)) return 'pending';
+  if (state.friendIds.length >= MAX_FRIENDS) return 'full';
+  if (state.incomingIds.includes(id)) {
+    await acceptFriendRequest(myUid, id, state);
+    return 'accepted';
+  }
   const player = await fetchPlayer(id);
   if (!player) return 'not_found';
-  await setDoc(doc(db, 'players', myUid, 'friends', id), { addedAt: serverTimestamp() });
-  return 'added';
+  await setDoc(requestRef(myUid, id), { from: myUid, to: id, createdAt: serverTimestamp() });
+  return 'sent';
 };
 
+// フレンドから外す（お互いの一覧から消す）
 export const removeFriend = async (myUid: string, friendId: string) => {
-  await deleteDoc(doc(db, 'players', myUid, 'friends', friendId));
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'players', myUid, 'friends', friendId));
+  batch.delete(doc(db, 'players', friendId, 'friends', myUid));
+  await batch.commit();
 };

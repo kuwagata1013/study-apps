@@ -1,15 +1,20 @@
 // ゲーム版のフレンド機能（フレンドタブの中身・アカウントIDのコピー・プレイヤー名の変更）
 import React, { useCallback, useEffect, useState } from 'react';
-import { BookOpen, Check, Copy, Flame, Pencil, RefreshCw, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { BookOpen, Check, Copy, Flame, Mail, Pencil, RefreshCw, Send, Trash2, UserPlus, Users, X } from 'lucide-react';
 import {
-  addFriend,
+  acceptFriendRequest,
+  cancelFriendRequest,
+  declineFriendRequest,
+  fetchFriendRequests,
   fetchFriends,
   MAX_FRIENDS,
   MAX_NAME_LENGTH,
   normalizeName,
   removeFriend,
-  type AddFriendResult,
-  type PlayerProfile
+  sendFriendRequest,
+  type FriendState,
+  type PlayerProfile,
+  type SendRequestResult
 } from '../../lib/players';
 import { dayKey, formatMinutes } from './gameStatsUtils';
 
@@ -135,29 +140,63 @@ export const PlayerNameEditor: React.FC<{ name: string; onSave: (name: string) =
   );
 };
 
-const RESULT_TEXT: Record<AddFriendResult, string> = {
-  added: 'フレンドに追加しました！',
+const RESULT_TEXT: Record<SendRequestResult, string> = {
+  sent: 'フレンド申請を送りました！相手が承認するとフレンドになります',
+  accepted: '相手からも申請が届いていたので、フレンドになりました！',
   self: 'それはあなた自身です',
   invalid: 'プレイヤー名かアカウントIDを入力してください',
   not_found: 'その名前・IDの冒険者は見つかりませんでした',
   already: 'すでにフレンドです',
+  pending: 'すでに申請しています。相手の承認を待ってください',
   full: `フレンドは ${MAX_FRIENDS} 人までです`
 };
 
+// 申請の一覧の1行（レベルと名前）
+const RequestRow: React.FC<{ p: PlayerProfile; children: React.ReactNode }> = ({ p, children }) => (
+  <div className="flex items-center gap-3 p-3 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15">
+    <div className="w-9 h-9 shrink-0 rounded-xl bg-[#fdd69f]/90 flex flex-col items-center justify-center">
+      <span className="text-[7px] font-bold text-[#312117] leading-none">Lv.</span>
+      <span className="text-xs font-black text-[#312117] leading-none">{p.level}</span>
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-sm font-bold text-white truncate">{p.name}</p>
+      {p.title && <p className="text-[11px] text-[#fdd69f]/80 truncate">{p.title}</p>}
+    </div>
+    <div className="shrink-0 flex items-center gap-1.5">{children}</div>
+  </div>
+);
+
 // フレンドタブ
-export const FriendsPanel: React.FC<{ uid: string | null }> = ({ uid }) => {
+// onIncomingCount: 届いている申請の数が変わったら知らせる（タブの印に使う）
+export const FriendsPanel: React.FC<{ uid: string | null; onIncomingCount?: (n: number) => void }> = ({ uid, onIncomingCount }) => {
   const [friends, setFriends] = useState<PlayerProfile[]>([]);
+  const [incoming, setIncoming] = useState<PlayerProfile[]>([]);
+  const [outgoing, setOutgoing] = useState<PlayerProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [input, setInput] = useState('');
   const [adding, setAdding] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const friendState = (): FriendState => ({
+    friendIds: friends.map((f) => f.uid),
+    incomingIds: incoming.map((p) => p.uid),
+    outgoingIds: outgoing.map((p) => p.uid)
+  });
+
+  useEffect(() => {
+    onIncomingCount?.(incoming.length);
+  }, [incoming.length, onIncomingCount]);
 
   const load = useCallback(async () => {
     if (!uid) return;
     setLoading(true);
     try {
+      const [list, requests] = await Promise.all([fetchFriends(uid), fetchFriendRequests(uid)]);
       // 今日たくさん勉強した人が上
-      setFriends((await fetchFriends(uid)).sort((a, b) => todayMinutesOf(b) - todayMinutesOf(a)));
+      setFriends(list.sort((a, b) => todayMinutesOf(b) - todayMinutesOf(a)));
+      setIncoming(requests.incoming);
+      setOutgoing(requests.outgoing);
     } catch (e) {
       console.error('フレンドの読み込みに失敗:', e);
       setMessage({ ok: false, text: 'フレンドを読み込めませんでした。通信状態を確認してください' });
@@ -176,22 +215,52 @@ export const FriendsPanel: React.FC<{ uid: string | null }> = ({ uid }) => {
     setAdding(true);
     setMessage(null);
     try {
-      const result = await addFriend(uid, input, friends.map((f) => f.uid));
-      setMessage({ ok: result === 'added', text: RESULT_TEXT[result] });
-      if (result === 'added') {
+      const result = await sendFriendRequest(uid, input, friendState());
+      const ok = result === 'sent' || result === 'accepted';
+      setMessage({ ok, text: RESULT_TEXT[result] });
+      if (ok) {
         setInput('');
         await load();
       }
     } catch (err) {
-      console.error('フレンド追加に失敗:', err);
-      setMessage({ ok: false, text: '追加できませんでした。通信状態を確認してください' });
+      console.error('フレンド申請に失敗:', err);
+      setMessage({ ok: false, text: '申請できませんでした。通信状態を確認して、もう一度お試しください' });
     } finally {
       setAdding(false);
     }
   };
 
+  // 届いた申請への返事（承認・拒否）と、送った申請の取り消し
+  const respond = async (p: PlayerProfile, action: 'accept' | 'decline' | 'cancel') => {
+    if (!uid || busyId) return;
+    if (action === 'accept' && friends.length >= MAX_FRIENDS) {
+      setMessage({ ok: false, text: RESULT_TEXT.full });
+      return;
+    }
+    setBusyId(p.uid);
+    setMessage(null);
+    try {
+      if (action === 'accept') {
+        await acceptFriendRequest(uid, p.uid, friendState());
+        setMessage({ ok: true, text: `${p.name} さんとフレンドになりました！` });
+        await load();
+      } else if (action === 'decline') {
+        await declineFriendRequest(uid, p.uid);
+        setIncoming((list) => list.filter((x) => x.uid !== p.uid));
+      } else {
+        await cancelFriendRequest(uid, p.uid);
+        setOutgoing((list) => list.filter((x) => x.uid !== p.uid));
+      }
+    } catch (err) {
+      console.error('フレンド申請の処理に失敗:', err);
+      setMessage({ ok: false, text: 'うまくいきませんでした。更新ボタンを押してから、もう一度お試しください' });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const onRemove = async (f: PlayerProfile) => {
-    if (!uid || !confirm(`${f.name} さんをフレンドから外しますか？`)) return;
+    if (!uid || !confirm(`${f.name} さんをフレンドから外しますか？（相手のフレンド一覧からも外れます）`)) return;
     try {
       await removeFriend(uid, f.uid);
       setFriends((list) => list.filter((x) => x.uid !== f.uid));
@@ -233,7 +302,7 @@ export const FriendsPanel: React.FC<{ uid: string | null }> = ({ uid }) => {
           </div>
 
           <form onSubmit={onAdd} className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2">
-            <p className="text-[11px] font-bold text-white/70">フレンドのプレイヤー名かアカウントIDで追加</p>
+            <p className="text-[11px] font-bold text-white/70">プレイヤー名かアカウントIDでフレンド申請</p>
             <div className="flex items-center gap-2">
               <input
                 value={input}
@@ -248,11 +317,57 @@ export const FriendsPanel: React.FC<{ uid: string | null }> = ({ uid }) => {
                 disabled={adding || !input.trim()}
                 className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-lg bg-[#fdd69f] text-[#312117] text-[11px] font-bold disabled:opacity-40"
               >
-                <UserPlus size={14} /> 追加
+                <UserPlus size={14} /> 申請
               </button>
             </div>
             {message && <p className={`text-[11px] ${message.ok ? 'text-emerald-300' : 'text-red-300'}`}>{message.text}</p>}
           </form>
+
+          {incoming.length > 0 && (
+            <div className="space-y-2">
+              <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#fdd69f]">
+                <Mail size={13} /> 届いたフレンド申請（{incoming.length}件）
+              </p>
+              {incoming.map((p) => (
+                <RequestRow key={p.uid} p={p}>
+                  <button
+                    onClick={() => void respond(p, 'accept')}
+                    disabled={!!busyId}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#fdd69f] text-[#312117] text-[11px] font-bold disabled:opacity-40"
+                  >
+                    <Check size={13} /> 承認
+                  </button>
+                  <button
+                    onClick={() => void respond(p, 'decline')}
+                    disabled={!!busyId}
+                    className="px-2.5 py-1.5 rounded-lg border border-white/20 text-white/70 text-[11px] font-bold hover:bg-white/5 disabled:opacity-40"
+                  >
+                    拒否
+                  </button>
+                </RequestRow>
+              ))}
+            </div>
+          )}
+
+          {outgoing.length > 0 && (
+            <div className="space-y-2">
+              <p className="flex items-center gap-1.5 text-[11px] font-bold text-white/70">
+                <Send size={12} /> 送ったフレンド申請（{outgoing.length}件・承認待ち）
+              </p>
+              {outgoing.map((p) => (
+                <RequestRow key={p.uid} p={p}>
+                  <span className="text-[10px] text-white/45">承認待ち</span>
+                  <button
+                    onClick={() => void respond(p, 'cancel')}
+                    disabled={!!busyId}
+                    className="px-2.5 py-1.5 rounded-lg border border-white/20 text-white/70 text-[11px] font-bold hover:bg-white/5 disabled:opacity-40"
+                  >
+                    取り消し
+                  </button>
+                </RequestRow>
+              ))}
+            </div>
+          )}
 
           <div className="space-y-2">
             <p className="text-[11px] font-bold text-white/70">
