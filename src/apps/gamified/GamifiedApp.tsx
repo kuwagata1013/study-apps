@@ -23,6 +23,8 @@ import {
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
+import GameStats from './GameStats';
+import { studyStreak } from './gameStatsUtils';
 import { trackEvent } from '../../lib/researchEvents';
 import { useScreenTracking } from '../../lib/useResearchTracking';
 import { useBgm } from '../../lib/useBgm';
@@ -44,6 +46,9 @@ const WALK_FRAME_COUNT = WALK_FRAMES.length;
 const WALK_FRAME_MS = 140; // 1コマの表示時間（ミリ秒）
 import { saveResearchLog } from '../../lib/researchLog';
 import { getParticipantId } from '../../lib/participant';
+
+// 以前の版で最初から入っていた見本クエスト（保存データからも取り除く）
+const SAMPLE_TASK_IDS = ['daily_login', 'timer_1min'];
 
 interface GamifiedAppProps {
   user?: any;
@@ -80,7 +85,6 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 2. ゲーミフィケーション・ステート
   const [level, setLevel] = useState(1);
   const [exp, setExp] = useState(0);
-  const [streak, setStreak] = useState(1);
   const [lifeTokens, setLifeTokens] = useState(1);
   const [lastStudyTime, setLastStudyTime] = useState<number>(Date.now());
   const maxExp = level * 100;
@@ -96,10 +100,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
   // 4. データステート
   const [logs, setLogs] = useState<StudyLog[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([
-    { id: 'daily_login', title: 'デイリーログインを完了する（自動）', completed: false, isAutomatic: true },
-    { id: 'timer_1min', title: '英語の学習を1分以上行う（確認用）', completed: false, isAutomatic: true, subject: '英語', targetMinutes: 1 },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   
   // 新規クエスト作成用ステート
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -133,8 +134,6 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     const savedExp = localStorage.getItem('gamified_exp');
     if (savedExp) setExp(Number(savedExp));
 
-    const savedStreak = localStorage.getItem('gamified_streak');
-    if (savedStreak) setStreak(Number(savedStreak));
 
     const savedTokens = localStorage.getItem('gamified_life_tokens');
     if (savedTokens) setLifeTokens(Number(savedTokens));
@@ -160,32 +159,19 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     const todayStr = new Date().toLocaleDateString('ja-JP');
     const lastLoginDate = localStorage.getItem('gamified_last_login_date');
 
-    const initialTasks: Task[] = [
-      { id: 'daily_login', title: 'デイリーログインを完了する（自動）', completed: false, isAutomatic: true },
-      { id: 'timer_1min', title: '英語の学習を1分以上行う（確認用）', completed: false, isAutomatic: true, subject: '英語', targetMinutes: 1 },
-    ];
-    
-    let loadedTasks = initialTasks;
+    // クエストは最初は空。以前の版で最初から入っていた見本クエストは取り除く
+    let loadedTasks: Task[] = [];
     const savedTasks = localStorage.getItem('gamified_tasks');
     if (savedTasks) {
-      try { 
-        loadedTasks = JSON.parse(savedTasks);
-      } catch (e) {
-        loadedTasks = initialTasks;
+      try {
+        loadedTasks = (JSON.parse(savedTasks) as Task[]).filter((t) => !SAMPLE_TASK_IDS.includes(t.id));
+      } catch {
+        loadedTasks = [];
       }
     }
 
     if (lastLoginDate !== todayStr) {
       localStorage.setItem('gamified_last_login_date', todayStr);
-
-      loadedTasks = loadedTasks.map(t => {
-        if (t.id === 'daily_login') {
-          if (!t.completed) trackEvent('quest_complete', { label: t.title });
-          return { ...t, completed: true };
-        }
-        return t;
-      });
-
       addExp(50);
       alert(`🌟 デイリーログインボーナス！ 本日最初のログインで +50 EXP を獲得しました！`);
     }
@@ -436,7 +422,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
               <div className="flex items-center gap-1.5 bg-orange-950/50 border border-orange-500/30 px-3 py-1 rounded-full text-xs font-bold text-orange-400">
                 <Flame size={14} className="fill-orange-500 text-orange-500 animate-pulse" />
-                <span>{streak} 日</span>
+                <span>{studyStreak(logs)} 日</span>
               </div>
             </div>
           </div>
@@ -710,48 +696,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
             {/* 戦績タブ */}
             {activeTab === 'stats' && (
-              <div className="space-y-4">
-                <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-3">
-                  <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <BarChart2 size={18} className="text-purple-400" /> 冒険戦績サマリー
-                  </h2>
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">現在レベル</p>
-                      <p className="text-2xl font-black text-purple-400 mt-1">Lv.{level}</p>
-                    </div>
-                    <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">救済アイテム</p>
-                      <p className="text-2xl font-black text-red-400 mt-1">× {lifeTokens}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-900/90 rounded-3xl p-6 shadow-xl border border-purple-500/20 space-y-3">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                    冒険・学習ログ履歴
-                  </h3>
-                  <div className="space-y-2">
-                    {logs.length === 0 ? (
-                      <p className="text-xs text-slate-500 text-center py-4">まだログがありません</p>
-                    ) : (
-                      logs.map((log) => (
-                        <div key={log.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
-                          <div>
-                            <span className="font-bold text-purple-300">{log.subject}</span>
-                            <p className="text-[10px] text-slate-500">{log.createdAt}</p>
-                            {log.memo && <p className="text-[10px] text-slate-400 mt-1">memo: {log.memo}</p>}
-                          </div>
-                          <div className="text-right">
-                            <span className="font-black text-slate-200">{log.durationMinutes} 分</span>
-                            <p className="text-[10px] text-yellow-400 font-bold">+{log.expGained} EXP</p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
+              <GameStats level={level} exp={exp} maxExp={maxExp} lifeTokens={lifeTokens} logs={logs} tasks={tasks} />
             )}
 
             {/* BGMタブ */}

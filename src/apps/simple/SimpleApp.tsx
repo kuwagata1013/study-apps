@@ -33,6 +33,9 @@ import { useBgm } from '../../lib/useBgm';
 import { getParticipantId } from '../../lib/participant';
 import { updateProfile, signOut } from 'firebase/auth';
 
+// 以前の版で最初から入っていた見本タスク（保存データからも取り除く）
+const SAMPLE_TASK_TITLES = ['英語 単語帳 p.20-40', '数学 ワーク2ページ'];
+
 interface SimpleAppProps {
   user?: any;
   onSelectMode?: (mode: 'simple' | 'gamified') => void;
@@ -79,10 +82,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
   // 3. データステート
   const [logs, setLogs] = useState<StudyLog[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([
-    { id: '1', title: '英語 単語帳 p.20-40', completed: false, dueDate: new Date().toISOString().split('T')[0] },
-    { id: '2', title: '数学 ワーク2ページ', completed: true, dueDate: '2026-09-15', completedAt: '2026-09-15 14:30:15', completedDateKey: '2026-09-15' },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
 
@@ -199,7 +199,16 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     }
     const savedTasks = localStorage.getItem(taskKey);
     if (savedTasks) {
-      try { setTasks(JSON.parse(savedTasks)); } catch (e) {}
+      try {
+        // 以前の版で最初から入っていた見本タスクは取り除く
+        const loaded = (JSON.parse(savedTasks) as Task[]).filter(
+          (t) => !(['1', '2'].includes(t.id) && SAMPLE_TASK_TITLES.includes(t.title))
+        );
+        setTasks(loaded);
+        localStorage.setItem(taskKey, JSON.stringify(loaded));
+      } catch {
+        // 読めない場合は空のまま
+      }
     }
   }, []);
 
