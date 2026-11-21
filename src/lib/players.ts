@@ -21,8 +21,12 @@ export interface PlayerProfile {
 
 export const normalizeName = (name: string) => name.replace(/\s+/g, ' ').trim().slice(0, MAX_NAME_LENGTH);
 
-// 大文字・小文字、全角・半角、前後の空白の違いは同じ名前として扱う
-export const nameKey = (name: string) => encodeURIComponent(normalizeName(name).normalize('NFKC').toLowerCase());
+// 名前の登録に使うキー。大文字・小文字、全角・半角は別の名前として扱う（前後の空白と、続いた空白だけはまとめる）
+export const nameKey = (name: string) => encodeURIComponent(normalizeName(name));
+// 以前の版のキー（大文字・小文字、全角・半角を同じとみなしていた）。登録済みの人を新しいキーへ移すために使う
+const legacyNameKey = (name: string) => encodeURIComponent(normalizeName(name).normalize('NFKC').toLowerCase());
+// Firestore のドキュメントIDに使えないもの（「.」「..」「__名前__」）
+const isUsableKey = (key: string) => !!key && key !== '.' && key !== '..' && !/^__.*__$/.test(key);
 
 // ===== 端末に覚えておく自分の名前（オフラインでもすぐ表示できるように。アカウントごと） =====
 const cacheKey = (uid: string) => `player_name_${uid}`;
@@ -46,8 +50,23 @@ export const loadMyName = async (uid: string): Promise<string | null> => {
   const snap = await getDoc(doc(db, 'players', uid));
   const name = snap.exists() ? ((snap.data() as { name?: string }).name ?? '') : '';
   if (!name) return null;
-  const owner = await getDoc(doc(db, 'playerNames', nameKey(name)));
-  if (!owner.exists() || (owner.data() as { uid?: string }).uid !== uid) return null;
+  const key = nameKey(name);
+  const owner = await getDoc(doc(db, 'playerNames', key));
+  if (owner.exists()) {
+    if ((owner.data() as { uid?: string }).uid !== uid) return null;
+  } else {
+    // 以前の版のキーで登録されていたら、新しいキーに登録し直す
+    const legacy = legacyNameKey(name);
+    if (legacy === key || !isUsableKey(key)) return null;
+    const old = await getDoc(doc(db, 'playerNames', legacy));
+    if (!old.exists() || (old.data() as { uid?: string }).uid !== uid) return null;
+    try {
+      await setDoc(doc(db, 'playerNames', key), { uid, name, updatedAt: serverTimestamp() });
+    } catch {
+      return null;
+    }
+    await deleteDoc(doc(db, 'playerNames', legacy)).catch(() => undefined);
+  }
   setCachedName(uid, name);
   return name;
 };
@@ -58,7 +77,7 @@ export type ClaimResult = 'ok' | 'taken' | 'invalid';
 export const claimPlayerName = async (uid: string, rawName: string, oldName?: string): Promise<ClaimResult> => {
   const name = normalizeName(rawName);
   const key = nameKey(name);
-  if (!name || !key) return 'invalid';
+  if (!name || !isUsableKey(key)) return 'invalid';
   const ref = doc(db, 'playerNames', key);
   const snap = await getDoc(ref);
   if (snap.exists()) {
@@ -73,8 +92,14 @@ export const claimPlayerName = async (uid: string, rawName: string, oldName?: st
   }
   await setDoc(doc(db, 'players', uid), { name, updatedAt: serverTimestamp() }, { merge: true });
   if (oldName) {
-    const oldKey = nameKey(oldName);
-    if (oldKey && oldKey !== key) await deleteDoc(doc(db, 'playerNames', oldKey)).catch(() => undefined);
+    // 前の名前の登録を外す（以前の版のキーで残っていればそれも）
+    // 自分の登録だけを外す（以前の版のキーは別の人が使っていることもある）
+    for (const oldKey of new Set([nameKey(oldName), legacyNameKey(oldName)])) {
+      if (!isUsableKey(oldKey) || oldKey === key) continue;
+      const ref = doc(db, 'playerNames', oldKey);
+      const old = await getDoc(ref).catch(() => null);
+      if (old?.exists() && (old.data() as { uid?: string }).uid === uid) await deleteDoc(ref).catch(() => undefined);
+    }
   }
   setCachedName(uid, name);
   return 'ok';
@@ -127,9 +152,20 @@ export const isValidAccountId = (id: string) => /^[A-Za-z0-9_-]{6,128}$/.test(id
 
 const findUidByName = async (name: string): Promise<string | null> => {
   const key = nameKey(name);
-  if (!key) return null;
+  if (!isUsableKey(key)) return null;
   const snap = await getDoc(doc(db, 'playerNames', key));
-  return snap.exists() ? ((snap.data() as { uid?: string }).uid ?? null) : null;
+  if (snap.exists()) {
+    // 以前の版の登録は小文字のキーに別の書き方の名前が入っていることがあるので、名前も同じか確かめる
+    const d = snap.data() as { uid?: string; name?: string };
+    if (d.name === normalizeName(name)) return d.uid ?? null;
+  }
+  // 以前の版のキーのまま（まだ新しい版を開いていない人）。名前が完全に同じときだけ見つかったことにする
+  const legacy = legacyNameKey(name);
+  if (legacy === key || !isUsableKey(legacy)) return null;
+  const old = await getDoc(doc(db, 'playerNames', legacy));
+  if (!old.exists()) return null;
+  const d = old.data() as { uid?: string; name?: string };
+  return d.name === normalizeName(name) ? (d.uid ?? null) : null;
 };
 
 export type AddFriendResult = 'added' | 'self' | 'invalid' | 'not_found' | 'already' | 'full';
