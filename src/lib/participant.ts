@@ -18,6 +18,15 @@ export const getParticipantId = (): string => {
   }
 };
 
+// この端末の参加者IDを消す（アカウントから来たIDを、ログアウトしたときに残さないため）
+export const clearParticipantId = () => {
+  try {
+    localStorage.removeItem(PARTICIPANT_KEY);
+  } catch {
+    // 無視
+  }
+};
+
 export const saveParticipantId = (id: string) => {
   try {
     localStorage.setItem(PARTICIPANT_KEY, id);

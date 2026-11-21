@@ -18,7 +18,6 @@ import {
   Sparkles,
   Gem,
   RefreshCw,
-  Lock,
   LogOut
 } from 'lucide-react';
 import { signOut } from 'firebase/auth';
@@ -26,7 +25,6 @@ import { auth } from '../../firebase';
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
-import QuestCalendar from './QuestCalendar';
 import { AccountIdCopy, FriendsPanel, PlayerNameEditor } from './FriendsPanel';
 import { countIncomingRequests, savePlayerStats } from '../../lib/players';
 import './GameStage.css';
@@ -43,7 +41,7 @@ import {
   streakBonusRate,
   streakUntilYesterday,
   studyStreak,
-  MAX_LEVEL,
+  LEGEND_LEVEL,
   applyExp,
   expToNext,
   levelTitle
@@ -79,7 +77,6 @@ interface GamifiedAppProps {
   user?: any;
   playerName?: string; // ログイン後に決めたプレイヤー名
   onRenamePlayer?: (name: string) => Promise<string | null>;
-  onOpenAdmin?: () => void;
   onResetMode?: () => void;
 }
 
@@ -106,7 +103,6 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   user,
   playerName = '',
   onRenamePlayer,
-  onOpenAdmin,
   onResetMode
 }) => {
   // 1. タブ管理
@@ -122,8 +118,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // ライフクリスタルで守った日（'YYYY-MM-DD'）
   const [protectedDays, setProtectedDays] = useState<string[]>([]);
   const [lastStudyTime, setLastStudyTime] = useState<number>(Date.now());
-  // 次のレベルに必要な EXP（Lv100 で最大）
-  const isMaxLevel = level >= MAX_LEVEL;
+  // 次のレベルに必要な EXP
   const maxExp = expToNext(level);
   // 最新のレベルと EXP（読み込み直後にも正しく足せるよう state とは別に持つ）
   const progressRef = useRef({ level: 1, exp: 0 });
@@ -315,13 +310,13 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
     if (after.level > before.level) {
       const newTitle = levelTitle(after.level) !== levelTitle(before.level) ? levelTitle(after.level) : null;
-      if (after.level >= MAX_LEVEL) {
-        // 最大レベル到達は特別な演出
+      if (before.level < LEGEND_LEVEL && after.level >= LEGEND_LEVEL) {
+        // Lv100（伝説の冒険者）到達は特別な演出
         const fire = (x: number) => confetti({ particleCount: 160, spread: 100, startVelocity: 55, origin: { x, y: 0.7 } });
         fire(0.2);
         fire(0.8);
         setTimeout(() => fire(0.5), 400);
-        alert(`👑 Lv.${MAX_LEVEL} 到達！ 称号「${levelTitle(after.level)}」を手に入れました！\nここまで続けたあなたは本物の伝説です。`);
+        alert(`👑 Lv.${LEGEND_LEVEL} 到達！ 称号「${levelTitle(LEGEND_LEVEL)}」を手に入れました！\nここまで続けたあなたは本物の伝説です。この先もレベルは上がり続けます。`);
       } else {
         confetti({ particleCount: newTitle ? 200 : 120, spread: newTitle ? 100 : 80, origin: { y: 0.6 } });
         alert(
@@ -588,12 +583,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
               </p>
               <div className="flex justify-between text-[9px] font-bold text-[#fdd69f] mt-0.5">
                 <span className="flex items-center gap-0.5"><Zap size={9} className="text-[#fdd69f]" /> EXP</span>
-                <span>{isMaxLevel ? "MAX" : `${exp} / ${maxExp}`}</span>
+                <span>{`${exp} / ${maxExp}`}</span>
               </div>
               <div className="h-2 mt-0.5 w-full bg-[#312117] rounded-full overflow-hidden border border-[#fdd69f]/30">
                 <div
                   className="h-full bg-[#fdd69f] rounded-full transition-all duration-300"
-                  style={{ width: isMaxLevel ? "100%" : `${Math.min(100, (exp / maxExp) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (exp / maxExp) * 100)}%` }}
                 />
               </div>
             </div>
@@ -858,7 +853,6 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                     </div>
                   </div>
 
-                  <QuestCalendar logs={logs} tasks={tasks} protectedDays={protectedDays} />
                   </div>
                 )}
 
@@ -1012,14 +1006,6 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                       >
                         <RefreshCw size={16} />
                         モードを再選択する（スタート画面へ）
-                      </button>
-
-                      <button
-                        onClick={() => onOpenAdmin?.()}
-                        className="w-full py-3 bg-[#4a3424]/60 hover:bg-[#4a3424] text-white font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-[#fdd69f]/50"
-                      >
-                        <Lock size={16} />
-                        管理者用分析ページ（管理者アカウント限定）
                       </button>
 
                       {user && (

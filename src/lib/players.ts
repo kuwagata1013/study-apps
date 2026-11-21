@@ -114,7 +114,7 @@ export const savePlayerStats = async (
   await setDoc(
     doc(db, 'players', uid),
     {
-      level: Math.max(1, Math.min(100, Math.floor(s.level))),
+      level: Math.max(1, Math.min(100000, Math.floor(s.level))),
       title: s.title.slice(0, 40),
       streakDays: Math.max(0, Math.floor(s.streakDays)),
       todayMinutes: Math.max(0, Math.min(1440, Math.round(s.todayMinutes))),

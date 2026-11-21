@@ -1,4 +1,4 @@
-// クエストボードの下に出すカレンダー（学習した日・クエストをクリアした日・クリスタルで守った日）
+// 戦績タブに出すカレンダー（学習した日・クエストをクリアした日・クリスタルで守った日）
 import React, { useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Gem } from 'lucide-react';
 import { dayKey, formatMinutes, logTime, pad, WEEKDAYS, type StatsLog } from './gameStatsUtils';
@@ -15,6 +15,15 @@ interface Props {
   tasks: CalendarTask[];
   protectedDays: string[];
 }
+
+// マスに収まる短い時間表示（例: 40分 / 1h25 / 2h）
+const shortMinutes = (min: number) => {
+  const m = Math.round(min);
+  if (m < 60) return `${m}分`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest === 0 ? `${h}h` : `${h}h${pad(rest)}`;
+};
 
 // 学習時間に応じたマスの濃さ
 const heatClass = (min: number) =>
@@ -95,38 +104,53 @@ export const QuestCalendar: React.FC<Props> = ({ logs, tasks, protectedDays }) =
         この月：{monthDays}日 学習・合計 {formatMinutes(monthMinutes)}
       </p>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-[11px]">
-        {WEEKDAYS.map((d, i) => (
-          <div key={d} className={`font-bold py-1 ${i === 0 ? 'text-red-300' : i === 6 ? 'text-sky-300' : 'text-white/50'}`}>
-            {d}
-          </div>
-        ))}
-        {Array.from({ length: firstDay }).map((_, i) => (
-          <div key={`e${i}`} />
-        ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const k = `${monthPrefix}${pad(i + 1)}`;
-          const min = minutesOn(k);
-          const cleared = clearedOn(k).length > 0;
-          const isProtected = protectedSet.has(k) && min === 0;
-          const isSel = k === selected;
-          const isToday = k === today;
-          return (
-            <button
-              key={k}
-              onClick={() => setSelected(k)}
-              className={`h-11 rounded-xl flex flex-col items-center justify-center gap-0.5 transition border ${heatClass(min)} ${
-                isSel ? 'border-[#fdd69f] ring-1 ring-[#fdd69f]' : isToday ? 'border-[#fdd69f]/50' : 'border-transparent hover:border-[#fdd69f]/30'
+      {/* 枠と区切り線のある月のマス（最後の週も空きマスで埋めて線をそろえる） */}
+      <div className="rounded-xl overflow-hidden border border-[#fdd69f]/25 text-center text-[11px]">
+        <div className="grid grid-cols-7 bg-[#1f140d] border-b border-[#fdd69f]/25">
+          {WEEKDAYS.map((d, i) => (
+            <div
+              key={d}
+              className={`font-bold py-1.5 ${i > 0 ? 'border-l border-[#fdd69f]/15' : ''} ${
+                i === 0 ? 'text-red-300' : i === 6 ? 'text-sky-300' : 'text-white/50'
               }`}
             >
-              <span className={`font-bold leading-none ${min > 0 ? 'text-white' : 'text-white/55'}`}>{i + 1}</span>
-              <span className="flex gap-0.5 h-2.5 items-center">
-                {cleared && <CheckCircle2 size={9} className="text-emerald-300" />}
-                {isProtected && <Gem size={9} className="text-sky-300" />}
-              </span>
-            </button>
-          );
-        })}
+              {d}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {Array.from({ length: Math.ceil((firstDay + daysInMonth) / 7) * 7 }).map((_, idx) => {
+            const col = idx % 7;
+            const lines = `${col > 0 ? 'border-l' : ''} ${idx >= 7 ? 'border-t' : ''} border-[#fdd69f]/15`;
+            const day = idx - firstDay + 1;
+            if (day < 1 || day > daysInMonth) return <div key={`e${idx}`} className={`h-14 bg-black/15 ${lines}`} />;
+            const k = `${monthPrefix}${pad(day)}`;
+            const min = minutesOn(k);
+            const cleared = clearedOn(k).length > 0;
+            const isProtected = protectedSet.has(k) && min === 0;
+            const isSel = k === selected;
+            const isToday = k === today;
+            return (
+              <button
+                key={k}
+                onClick={() => setSelected(k)}
+                className={`h-14 min-w-0 flex flex-col items-center justify-center gap-0.5 transition ${lines} ${heatClass(min)} ${
+                  isSel ? 'ring-2 ring-inset ring-[#fdd69f]' : isToday ? 'ring-1 ring-inset ring-[#fdd69f]/60' : 'hover:bg-[#fdd69f]/10'
+                }`}
+              >
+                <span className={`font-bold leading-none ${min > 0 ? 'text-white' : 'text-white/55'}`}>{day}</span>
+                {/* その日の合計学習時間 */}
+                <span className={`text-[9px] leading-none font-bold tracking-tight whitespace-nowrap ${min > 0 ? 'text-[#ffe9c7]' : 'text-transparent'}`}>
+                  {min > 0 ? shortMinutes(min) : '-'}
+                </span>
+                <span className="flex gap-0.5 h-2.5 items-center">
+                  {cleared && <CheckCircle2 size={9} className="text-emerald-300" />}
+                  {isProtected && <Gem size={9} className="text-sky-300" />}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/60">

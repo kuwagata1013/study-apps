@@ -17,7 +17,6 @@ import {
   Timer,
   Settings,
   Music,
-  Lock,
   LogOut,
   RefreshCw,
   CloudRain,
@@ -38,7 +37,6 @@ const SAMPLE_TASK_TITLES = ['英語 単語帳 p.20-40', '数学 ワーク2ペー
 interface SimpleAppProps {
   user?: any;
   onSelectMode?: (mode: 'simple' | 'gamified') => void;
-  onOpenAdmin?: () => void;
   onResetMode?: () => void; // モード切替（スタート画面へ戻る）用コールバック
 }
 
@@ -71,7 +69,6 @@ const SIMPLE_BGM: { id: SimpleBgm; name: string; desc: string; icon: React.React
 
 export const SimpleApp: React.FC<SimpleAppProps> = ({ 
   user, 
-  onOpenAdmin,
   onResetMode 
 }) => {
   // 1. タブ管理 (timer | todo | calendar | stats | profile)
@@ -894,14 +891,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
               >
                 <RefreshCw size={16} />
                 モードを再選択する（スタート画面へ）
-              </button>
-
-              <button
-                onClick={() => onOpenAdmin?.()}
-                className="w-full py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-purple-100"
-              >
-                <Lock size={16} />
-                管理者用分析ページ（管理者アカウント限定）
               </button>
 
               {user && (

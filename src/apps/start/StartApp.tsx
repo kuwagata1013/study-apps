@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Coffee, Sparkles, LogIn, ArrowRight, User, IdCard, UserRound, Pencil } from 'lucide-react';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { Coffee, Sparkles, LogIn, LogOut, ArrowRight, User, IdCard, UserRound, Pencil, Lock, KeyRound, Shield } from 'lucide-react';
+import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { auth } from '../../firebase';
 import {
   getParticipantId,
@@ -10,6 +10,24 @@ import {
   PARTICIPANT_ID_MAX
 } from '../../lib/participant';
 import { claimPlayerName, MAX_NAME_LENGTH, normalizeName } from '../../lib/players';
+import { loginWithParticipantId, participantIdFromEmail, type LoginError } from '../../lib/participantAuth';
+
+const LOGIN_ERROR_TEXT: Record<LoginError, string> = {
+  wrong: '参加者IDかパスワードがちがいます',
+  too_many: '何度もまちがえたため、しばらくログインできません。少し待ってからお試しください',
+  disabled: 'このアカウントは使えません。先生（管理者）に確認してください',
+  network: '通信できませんでした。インターネットにつながっているか確認してください',
+  unknown: 'ログインできませんでした。もう一度お試しください'
+};
+
+// 管理者用の入り口（URL の最後に ?admin を付けたときだけ、Google ログインと管理者ページのボタンを出す）
+const isAdminEntry = () => {
+  try {
+    return new URLSearchParams(window.location.search).has('admin');
+  } catch {
+    return false;
+  }
+};
 
 interface StartAppProps {
   onSelectMode: (mode: 'simple' | 'gamified') => void;
@@ -17,10 +35,48 @@ interface StartAppProps {
   playerName?: string;
   nameStatus?: 'none' | 'checking' | 'ready' | 'missing';
   onNameSaved?: (name: string) => void;
+  lockedParticipantId?: string; // アカウントに登録済みの参加者ID（変更できない）
+  participantChecking?: boolean; // アカウントの参加者IDを確認中
+  onOpenAdmin?: () => void;
 }
 
-export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerName = '', nameStatus = 'none', onNameSaved }) => {
+export const StartApp: React.FC<StartAppProps> = ({
+  onSelectMode,
+  user,
+  playerName = '',
+  nameStatus = 'none',
+  onNameSaved,
+  lockedParticipantId = '',
+  participantChecking = false,
+  onOpenAdmin
+}) => {
   const [loading, setLoading] = useState(false);
+  const adminEntry = isAdminEntry();
+
+  // 参加者ID＋パスワードでのログイン
+  const [loginId, setLoginId] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const handleIdLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = loginId.trim();
+    if (!id || !loginPassword || loading) return;
+    setLoading(true);
+    setLoginError('');
+    const err = await loginWithParticipantId(id, loginPassword);
+    setLoading(false);
+    if (err) setLoginError(LOGIN_ERROR_TEXT[err]);
+    else setLoginPassword('');
+  };
+  const handleLogout = async () => {
+    if (!confirm('ログアウトしますか？')) return;
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('ログアウトエラー:', err);
+    }
+  };
+
 
   // プレイヤー名（ログインしている人だけ。Google アカウントの名前は使わない）
   const [editingName, setEditingName] = useState(false);
@@ -65,13 +121,17 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
   const [participantInput, setParticipantInput] = useState(getParticipantId());
   const [participantError, setParticipantError] = useState('');
 
-  const participantId = normalizeParticipantId(participantInput);
+  const participantId = lockedParticipantId || normalizeParticipantId(participantInput);
   const isParticipantValid = isValidParticipantId(participantId);
 
   // 参加者IDを確認・保存してからモードを開始
   const handleSelectMode = (mode: 'simple' | 'gamified') => {
     if (needsName) {
       setNameError(nameStatus === 'checking' ? '名前を確認中です。少し待ってからもう一度押してください' : '先にプレイヤー名を決めてください');
+      return;
+    }
+    if (participantChecking) {
+      setParticipantError('参加者IDを確認中です。少し待ってからもう一度押してください');
       return;
     }
     if (!isParticipantValid) {
@@ -117,7 +177,7 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
         {/* STEP 1: アカウント確認 */}
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4 text-center">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            STEP 1: アカウント確認
+            STEP 1: ログイン
           </span>
 
           {user ? (
@@ -153,27 +213,70 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
                       </button>
                     )}
                   </div>
-                  <p className="text-[10px] text-gray-400 truncate">{user.email}</p>
+                  <p className="text-[10px] text-gray-400 truncate">
+                    {participantIdFromEmail(user.email) ? `参加者ID：${lockedParticipantId || participantIdFromEmail(user.email)}` : user.email}
+                  </p>
                 </div>
               </div>
-              <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded-full shrink-0">
-                認証済み
-              </span>
+              <div className="shrink-0 flex flex-col items-end gap-1.5">
+                <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded-full">ログイン中</span>
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600"
+                >
+                  <LogOut size={11} /> ログアウト
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="space-y-3">
+            <form onSubmit={handleIdLogin} className="space-y-3 text-left">
+              <p className="text-[11px] text-gray-500 text-center">配られた参加者IDとパスワードでログインしてください</p>
+              <label className="block">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-1.5">
+                  <IdCard size={14} /> 参加者ID
+                </span>
+                <input
+                  value={loginId}
+                  onChange={(e) => {
+                    setLoginId(e.target.value);
+                    setLoginError('');
+                  }}
+                  maxLength={PARTICIPANT_ID_MAX}
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="例: A01"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 font-mono"
+                />
+              </label>
+              <label className="block">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-1.5">
+                  <KeyRound size={14} /> パスワード
+                </span>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => {
+                    setLoginPassword(e.target.value);
+                    setLoginError('');
+                  }}
+                  autoComplete="current-password"
+                  placeholder="パスワード"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 font-mono"
+                />
+              </label>
+              {loginError && <p className="text-[11px] text-red-500 font-bold">{loginError}</p>}
               <button
-                onClick={handleGoogleLogin}
-                disabled={loading}
+                type="submit"
+                disabled={loading || !loginId.trim() || !loginPassword}
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-md transition active:scale-98 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
               >
                 <LogIn size={18} />
-                {loading ? 'ログイン中...' : 'Googleアカウントでログイン'}
+                {loading ? 'ログイン中...' : 'ログイン'}
               </button>
-              <p className="text-[10px] text-gray-400">
-                ※未ログインのままゲストで利用を開始することも可能です
-              </p>
-            </div>
+              <p className="text-[10px] text-gray-400 text-center">パスワードを忘れたときは、先生（管理者）に聞いてください</p>
+            </form>
           )}
         </div>
 
@@ -242,34 +345,64 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
           <div className="text-center">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              STEP {idStep}: 参加者IDを入力
+              STEP {idStep}: {lockedParticipantId ? '参加者IDの確認' : '参加者IDを入力'}
             </span>
           </div>
-          <label className="block">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-1.5">
-              <IdCard size={14} /> 参加者ID
-            </span>
-            <input
-              type="text"
-              value={participantInput}
-              onChange={(e) => {
-                setParticipantInput(e.target.value);
-                setParticipantError('');
-              }}
-              maxLength={PARTICIPANT_ID_MAX}
-              autoComplete="off"
-              placeholder="例: A01"
-              className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 font-mono ${
-                participantError ? 'border-red-400' : 'border-gray-200'
-              }`}
-            />
-          </label>
-          {participantError ? (
-            <p className="text-[11px] text-red-500 font-bold">{participantError}</p>
+          {lockedParticipantId ? (
+            // アカウントに登録済み：変更できない
+            <div className="space-y-1.5">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                <IdCard size={14} /> 参加者ID
+              </span>
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+                <span className="text-sm font-mono font-bold text-gray-900 truncate">{lockedParticipantId}</span>
+                <span className="shrink-0 flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                  <Lock size={10} /> アカウントに登録済み
+                </span>
+              </div>
+              {participantError ? (
+                <p className="text-[11px] text-red-500 font-bold">{participantError}</p>
+              ) : (
+                <p className="text-[10px] text-gray-400">
+                  このアカウントの参加者IDです。どの端末でもログインすると同じIDになります。変更したいときは管理者に連絡してください。
+                </p>
+              )}
+            </div>
           ) : (
-            <p className="text-[10px] text-gray-400">
-              配布されたIDを入力してください。どの端末でも同じIDを使うと、記録がまとめて集計されます。
-            </p>
+            <>
+              <label className="block">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-1.5">
+                  <IdCard size={14} /> 参加者ID
+                </span>
+                <input
+                  type="text"
+                  value={participantInput}
+                  disabled={participantChecking}
+                  onChange={(e) => {
+                    setParticipantInput(e.target.value);
+                    setParticipantError('');
+                  }}
+                  maxLength={PARTICIPANT_ID_MAX}
+                  autoComplete="off"
+                  placeholder={participantChecking ? '確認中...' : '例: A01'}
+                  className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 font-mono disabled:opacity-50 ${
+                    participantError ? 'border-red-400' : 'border-gray-200'
+                  }`}
+                />
+              </label>
+              {participantError ? (
+                <p className="text-[11px] text-red-500 font-bold">{participantError}</p>
+              ) : user ? (
+                <p className="text-[10px] text-gray-400">
+                  配布されたIDを入力してください。<span className="font-bold text-gray-500">ログイン中は、このIDがアカウントに登録され、あとから変更できません。</span>
+                  入力まちがいに気をつけてください。
+                </p>
+              ) : (
+                <p className="text-[10px] text-gray-400">
+                  配布されたIDを入力してください。どの端末でも同じIDを使うと、記録がまとめて集計されます。
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -324,6 +457,30 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
           </div>
         </div>
 
+        {/* 管理者用（URL に ?admin を付けたときだけ表示） */}
+        {adminEntry && (
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-purple-100 space-y-3">
+            <p className="flex items-center justify-center gap-1.5 text-[10px] font-bold text-purple-500 uppercase tracking-widest">
+              <Shield size={12} /> 管理者用
+            </p>
+            {!user ? (
+              <button
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full py-3 bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 font-bold rounded-2xl transition flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+              >
+                <LogIn size={16} /> Googleアカウントでログイン（管理者）
+              </button>
+            ) : (
+              <button
+                onClick={() => onOpenAdmin?.()}
+                className="w-full py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-purple-100"
+              >
+                <Lock size={16} /> 管理者ページを開く
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

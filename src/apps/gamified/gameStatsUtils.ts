@@ -91,26 +91,26 @@ export const CRYSTAL_STREAK_STEP = 7;
 export const FOCUS_BONUS_SECONDS = 25 * 60;
 
 // ===== レベル =====
-// 最大レベル。次のレベルに必要な EXP は 100 から始まり、1レベルごとに 10 ずつ増える
+// レベルに上限はない。次のレベルに必要な EXP は 100 から始まり、1レベルごとに 10 ずつ増える
 // （Lv1→2 は 100 EXP ≒ 5分、Lv99→100 は 1,080 EXP ≒ 54分、Lv100 まで合計 58,410 EXP ≒ 49時間）
-export const MAX_LEVEL = 100;
+// Lv100 は称号「伝説の冒険者」がもらえる節目（到達時は特別な演出）
+export const LEGEND_LEVEL = 100;
 export const expToNext = (level: number) => 100 + 10 * (level - 1);
 
 // Lv1 から数えた累計 EXP
 export const totalExpAt = (level: number, exp = 0) => {
-  const n = Math.max(0, Math.min(MAX_LEVEL, level) - 1);
+  const n = Math.max(0, level - 1);
   return 100 * n + 5 * n * (n - 1) + exp;
 };
 
-// EXP を足したあとのレベルと EXP（Lv100 で止まる）
+// EXP を足したあとのレベルと EXP（上限なし）
 export const applyExp = (level: number, exp: number, gained: number) => {
-  let lv = Math.max(1, Math.min(MAX_LEVEL, level));
+  let lv = Math.max(1, Math.floor(level) || 1);
   let e = Math.max(0, exp) + Math.max(0, gained);
-  while (lv < MAX_LEVEL && e >= expToNext(lv)) {
+  while (e >= expToNext(lv)) {
     e -= expToNext(lv);
     lv += 1;
   }
-  if (lv >= MAX_LEVEL) e = 0;
   return { level: lv, exp: e };
 };
 

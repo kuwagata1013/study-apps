@@ -292,7 +292,7 @@ export const FriendsPanel: React.FC<{ uid: string | null; onIncomingCount?: (n: 
         <div className="p-6 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 text-center space-y-2">
           <Users size={32} className="mx-auto text-[#fdd69f]/60" />
           <p className="text-sm font-bold text-white">ログインするとフレンド機能が使えます</p>
-          <p className="text-xs text-white/55">プロフィールの「モードを再選択する」からスタート画面に戻り、Google でログインしてください</p>
+          <p className="text-xs text-white/55">プロフィールの「モードを再選択する」からスタート画面に戻り、配られた参加者IDとパスワードでログインしてください</p>
         </div>
       ) : (
         <>

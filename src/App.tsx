@@ -6,7 +6,15 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { getParticipantId, isValidParticipantId } from './lib/participant';
+import { clearParticipantId, getParticipantId, isValidParticipantId, saveParticipantId } from './lib/participant';
+import {
+  claimAccountParticipantId,
+  clearParticipantOwner,
+  getParticipantOwner,
+  loadAccountParticipantId,
+  setParticipantOwner
+} from './lib/accounts';
+import { participantIdFromEmail, takePendingLoginId } from './lib/participantAuth';
 import { setEventMode, setEventUser, startEventTracking } from './lib/researchEvents';
 import StartApp from './apps/start/StartApp';
 import GamifiedApp from './apps/gamified/GamifiedApp';
@@ -20,6 +28,8 @@ type AppMode = 'start' | 'simple' | 'gamified' | 'admin';
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  // ログイン状態がわかったか（わかる前は「未ログイン」と区別がつかないため）
+  const [authReady, setAuthReady] = useState(false);
   // 前回選んだモードを最初の描画から使う（参加者IDが未入力の場合はスタート画面で入力してもらう）
   const [mode, setMode] = useState<AppMode>(() => {
     const savedMode = localStorage.getItem('study_app_preferred_mode');
@@ -33,6 +43,11 @@ export const App: React.FC = () => {
   const [playerName, setPlayerName] = useState('');
   const [nameStatus, setNameStatus] = useState<'none' | 'checking' | 'ready' | 'missing'>('none');
 
+  // アカウントに登録した参加者ID（ログイン中だけ。登録済みなら変更できない）
+  // none: 未ログイン / checking: 確認中 / locked: 登録済み / unset: まだ登録していない
+  const [accountPid, setAccountPid] = useState('');
+  const [pidStatus, setPidStatus] = useState<'none' | 'checking' | 'locked' | 'unset'>('none');
+
   // 管理者画面アクセス保護用
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(false);
@@ -43,6 +58,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      setAuthReady(true);
       // 行動データ：ログイン状態がわかってから起動を記録する
       setEventUser(currentUser?.uid);
       startEventTracking();
@@ -98,6 +114,69 @@ export const App: React.FC = () => {
     }
   };
 
+  // 参加者IDをアカウントに結び付ける
+  // - アカウントに登録済みなら、この端末の参加者IDをそれに合わせる
+  // - まだなら、この端末で使っている参加者IDを登録する（最初の1回だけ）
+  // - ログアウトしたら、アカウントから来た参加者IDはこの端末から消して、スタート画面で入れ直してもらう
+  const backToStartIfNoPid = () => {
+    if (!isValidParticipantId(getParticipantId())) setMode((m) => (m === 'simple' || m === 'gamified' ? 'start' : m));
+  };
+  useEffect(() => {
+    if (!authReady) return;
+    let cancelled = false;
+    const owner = getParticipantOwner();
+    if (!uid) {
+      setAccountPid('');
+      setPidStatus('none');
+      if (owner) {
+        clearParticipantId();
+        clearParticipantOwner();
+        backToStartIfNoPid();
+      }
+      return;
+    }
+    // 別のアカウントの参加者IDが残っていたら使わない
+    if (owner && owner !== uid) {
+      clearParticipantId();
+      clearParticipantOwner();
+    }
+    setPidStatus('checking');
+    (async () => {
+      try {
+        // 参加者ID＋パスワードでログインしたときに入力したID（大文字・小文字をそのまま使うため）
+        const typed = takePendingLoginId();
+        let pid = await loadAccountParticipantId(uid);
+        if (!pid) {
+          // 参加者ID＋パスワードのアカウントはログインに使ったID、それ以外はこの端末で使っているIDを登録する
+          const fromEmail = participantIdFromEmail(auth.currentUser?.email);
+          // 管理者の Google アカウントには、この端末の参加者IDを登録しない
+          const isAdminUser = !fromEmail && (await getDoc(doc(db, 'admins', uid)).catch(() => null))?.exists();
+          const candidate = fromEmail ? (typed.toLowerCase() === fromEmail ? typed : fromEmail) : isAdminUser ? '' : getParticipantId();
+          if (isValidParticipantId(candidate)) {
+            await claimAccountParticipantId(uid, candidate);
+            pid = candidate;
+          }
+        }
+        if (cancelled) return;
+        if (pid) {
+          saveParticipantId(pid);
+          setParticipantOwner(uid);
+          setAccountPid(pid);
+          setPidStatus('locked');
+        } else {
+          setPidStatus('unset');
+          backToStartIfNoPid();
+        }
+      } catch (e) {
+        console.error('参加者IDの確認に失敗:', e);
+        if (!cancelled) setPidStatus('unset');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, uid]);
+
   // 行動データに現在のモードを付ける
   useEffect(() => {
     setEventMode(mode);
@@ -107,6 +186,17 @@ export const App: React.FC = () => {
   const handleSelectMode = (selectedMode: 'simple' | 'gamified') => {
     setMode(selectedMode);
     localStorage.setItem('study_app_preferred_mode', selectedMode);
+    // ログイン中で参加者IDがまだ登録されていなければ、いま入力したIDを登録する
+    const pid = getParticipantId();
+    if (uid && pidStatus === 'unset' && isValidParticipantId(pid)) {
+      claimAccountParticipantId(uid, pid)
+        .then(() => {
+          setParticipantOwner(uid);
+          setAccountPid(pid);
+          setPidStatus('locked');
+        })
+        .catch((e) => console.error('参加者IDの登録に失敗:', e));
+    }
   };
 
   // モードリセット（スタート画面に戻る）
@@ -188,6 +278,9 @@ export const App: React.FC = () => {
           user={user}
           playerName={playerName}
           nameStatus={nameStatus}
+          lockedParticipantId={pidStatus === 'locked' ? accountPid : ''}
+          participantChecking={pidStatus === 'checking'}
+          onOpenAdmin={openAdminAuth}
           onNameSaved={(name) => {
             setPlayerName(name);
             setNameStatus('ready');
@@ -198,7 +291,6 @@ export const App: React.FC = () => {
       {mode === 'simple' && (
         <SimpleApp 
           user={user} 
-          onOpenAdmin={openAdminAuth}
           onResetMode={handleResetMode}
         />
       )}
@@ -208,7 +300,6 @@ export const App: React.FC = () => {
           user={user}
           playerName={playerName}
           onRenamePlayer={renamePlayer}
-          onOpenAdmin={openAdminAuth}
           onResetMode={handleResetMode}
         />
       )}

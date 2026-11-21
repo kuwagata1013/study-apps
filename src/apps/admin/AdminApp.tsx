@@ -8,9 +8,12 @@ import {
   Trash2, 
   Upload, 
   Play, 
-  Pause
+  Pause,
+  Users
 } from 'lucide-react';
 import ResearchDataPanel from './ResearchDataPanel';
+import ParticipantAccountsPanel from './ParticipantAccountsPanel';
+import IssueAccountsForm from './IssueAccountsForm';
 import { BGM_SOURCES } from '../../lib/bgm';
 
 interface AdminAppProps {
@@ -35,7 +38,9 @@ const DEFAULT_BGM_LIST: BgmTrack[] = [
 const DEFAULT_IDS = new Set(DEFAULT_BGM_LIST.map((t) => t.id));
 
 export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
-  const [activeTab, setActiveTab] = useState<'bgm' | 'database'>('bgm');
+  const [activeTab, setActiveTab] = useState<'bgm' | 'database' | 'accounts'>('bgm');
+  // 発行したら一覧を読み直す
+  const [accountsVersion, setAccountsVersion] = useState(0);
 
   // --- 1. BGM管理用ステート ---
   const [bgmList, setBgmList] = useState<BgmTrack[]>(DEFAULT_BGM_LIST);
@@ -175,6 +180,15 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
           >
             <Database size={16} /> 研究データ
           </button>
+
+          <button
+            onClick={() => setActiveTab('accounts')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+              activeTab === 'accounts' ? 'bg-sky-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <Users size={16} /> 参加者アカウント
+          </button>
         </div>
 
         {/* ===== TAB 1: BGM追加 ＆ 削除 ===== */}
@@ -283,6 +297,14 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
 
         {/* ===== TAB 2: 研究データ ===== */}
         {activeTab === 'database' && <ResearchDataPanel />}
+
+        {/* ===== TAB 3: 参加者ID・名前・アカウントの対応 ===== */}
+        {activeTab === 'accounts' && (
+          <div className="space-y-6">
+            <IssueAccountsForm onIssued={() => setAccountsVersion((v) => v + 1)} />
+            <ParticipantAccountsPanel key={accountsVersion} />
+          </div>
+        )}
 
       </main>
 

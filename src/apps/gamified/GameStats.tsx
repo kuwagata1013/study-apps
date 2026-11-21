@@ -1,10 +1,11 @@
 // ゲーム版「戦績」タブ：自分の学習データを見やすくまとめる
 import React, { useMemo, useState } from 'react';
 import { BarChart2, Calendar, Clock, Flame, Gem, ListChecks, Trophy, Zap, BookOpen } from 'lucide-react';
+import QuestCalendar, { type CalendarTask } from './QuestCalendar';
 import {
   CRYSTAL_STREAK_STEP,
   EXP_PER_MINUTE,
-  MAX_LEVEL,
+  LEGEND_LEVEL,
   TITLES,
   nextTitle,
   totalExpAt,
@@ -15,8 +16,7 @@ import {
   logTime,
   pad,
   studyStreak,
-  type StatsLog,
-  type StatsTask
+  type StatsLog
 } from './gameStatsUtils';
 
 interface GameStatsProps {
@@ -26,7 +26,7 @@ interface GameStatsProps {
   lifeTokens: number;
   protectedDays: string[];
   logs: StatsLog[];
-  tasks: StatsTask[];
+  tasks: CalendarTask[];
 }
 
 const SUBJECT_COLORS: Record<string, string> = {
@@ -129,14 +129,14 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
 
   const completedQuests = tasks.filter((t) => t.completed).length;
   const maxDay = Math.max(30, ...stats.last7.map((d) => d.minutes));
-  const isMax = level >= MAX_LEVEL;
-  const expRatio = isMax ? 100 : Math.min(100, (exp / maxExp) * 100);
+  const expRatio = Math.min(100, (exp / maxExp) * 100);
   // 次の称号と、そこまでの EXP・学習時間の目安（ボーナスなしの場合）
   const upcoming = nextTitle(level);
   const toNextTitleExp = upcoming ? totalExpAt(upcoming.level) - totalExpAt(level, exp) : 0;
   const toNextTitleMin = Math.ceil(toNextTitleExp / EXP_PER_MINUTE);
-  // Lv100 までの進み具合
-  const journeyRatio = Math.min(100, (totalExpAt(level, exp) / totalExpAt(MAX_LEVEL)) * 100);
+  // Lv100（伝説の冒険者）までの進み具合。到達したら出さない
+  const isLegend = level >= LEGEND_LEVEL;
+  const journeyRatio = Math.min(100, (totalExpAt(level, exp) / totalExpAt(LEGEND_LEVEL)) * 100);
 
   return (
     <div className="space-y-4">
@@ -159,13 +159,7 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
               />
             </div>
             <p className="text-[10px] text-white/65 mt-1">
-              {isMax ? (
-                <span className="text-yellow-300 font-bold">最大レベル到達！ おめでとうございます</span>
-              ) : (
-                <>
-                  {exp} / {maxExp} EXP ・ 次のレベルまであと <span className="text-yellow-300 font-bold">{maxExp - exp} EXP</span>
-                </>
-              )}
+              {exp} / {maxExp} EXP ・ 次のレベルまであと <span className="text-yellow-300 font-bold">{maxExp - exp} EXP</span>
             </p>
           </div>
         </div>
@@ -179,15 +173,21 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
               <span className="text-white/60">（学習 約{formatMinutes(toNextTitleMin)}）</span>
             </p>
           )}
-          <div>
-            <div className="flex justify-between text-[10px] text-white/65">
-              <span>Lv.{MAX_LEVEL}「{TITLES[TITLES.length - 1].name}」への道のり</span>
-              <span className="font-bold text-white">{journeyRatio.toFixed(1)}%</span>
+          {isLegend ? (
+            <p className="text-[11px] text-yellow-300 font-bold">
+              👑 Lv.{LEGEND_LEVEL}「{TITLES[TITLES.length - 1].name}」到達！ レベルはこの先も上がり続けます
+            </p>
+          ) : (
+            <div>
+              <div className="flex justify-between text-[10px] text-white/65">
+                <span>Lv.{LEGEND_LEVEL}「{TITLES[TITLES.length - 1].name}」への道のり</span>
+                <span className="font-bold text-white">{journeyRatio.toFixed(1)}%</span>
+              </div>
+              <div className="mt-1 h-1.5 w-full bg-[#4a3424] rounded-full overflow-hidden">
+                <div className="h-full bg-[#fdd69f] rounded-full" style={{ width: `${journeyRatio}%` }} />
+              </div>
             </div>
-            <div className="mt-1 h-1.5 w-full bg-[#4a3424] rounded-full overflow-hidden">
-              <div className="h-full bg-[#fdd69f] rounded-full" style={{ width: `${journeyRatio}%` }} />
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -230,6 +230,9 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
           accent="text-white"
         />
       </div>
+
+      {/* 冒険カレンダー（学習した日・クリアしたクエスト） */}
+      <QuestCalendar logs={logs} tasks={tasks} protectedDays={protectedDays} />
 
       {/* 直近7日のグラフ */}
       <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
