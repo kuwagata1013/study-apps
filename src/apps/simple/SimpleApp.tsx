@@ -19,13 +19,17 @@ import {
   Music,
   Lock,
   LogOut,
-  RefreshCw
+  RefreshCw,
+  CloudRain,
+  Waves,
+  Coffee
 } from 'lucide-react';
 import { auth } from '../../firebase';
 import { saveResearchLog } from '../../lib/researchLog';
 import { trackEvent } from '../../lib/researchEvents';
 import { useScreenTracking } from '../../lib/useResearchTracking';
 import { useBgm } from '../../lib/useBgm';
+import Equalizer from '../../components/Equalizer';
 import { signOut } from 'firebase/auth';
 
 // 以前の版で最初から入っていた見本タスク（保存データからも取り除く）
@@ -57,6 +61,14 @@ interface Task {
   completedDateKey?: string;
 }
 
+// シンプル版の BGM（研究条件として、この3曲のまま）
+type SimpleBgm = 'rain' | 'waves' | 'cafe';
+const SIMPLE_BGM: { id: SimpleBgm; name: string; desc: string; icon: React.ReactNode }[] = [
+  { id: 'rain', name: '雨の音', desc: 'しとしと降る雨で気持ちを落ち着ける', icon: <CloudRain size={18} /> },
+  { id: 'waves', name: '波の音', desc: '寄せては返す波でリラックス', icon: <Waves size={18} /> },
+  { id: 'cafe', name: 'カフェ', desc: 'ほどよいざわめきで集中', icon: <Coffee size={18} /> }
+];
+
 export const SimpleApp: React.FC<SimpleAppProps> = ({ 
   user, 
   onOpenAdmin,
@@ -82,7 +94,14 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
 
   // 4. BGM関連ステート
-  const { isPlaying: isPlayingBgm, track: bgmType, toggle: toggleBgm, select: selectBgm } = useBgm<'rain' | 'waves' | 'cafe'>(
+  const {
+    isPlaying: isPlayingBgm,
+    track: bgmType,
+    toggle: toggleBgm,
+    playTrack: playBgmTrack,
+    volume: bgmVolume,
+    setVolume: setBgmVolume
+  } = useBgm<SimpleBgm>(
     'rain',
     { rain: 'rain', waves: 'waves', cafe: 'cafe' }
   );
@@ -777,39 +796,88 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           <div className="space-y-4">
             
             {/* BGM環境音設定 */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
-              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
-                <Music size={18} /> 集中BGM環境音
-              </h2>
-
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'rain', label: '雨の音' },
-                  { id: 'waves', label: '波の音' },
-                  { id: 'cafe', label: 'カフェ' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => selectBgm(item.id as 'rain' | 'waves' | 'cafe')}
-                    className={`py-3 px-2 rounded-2xl text-xs font-bold transition border ${
-                      bgmType === item.id 
-                        ? 'bg-gray-900 text-white border-gray-900' 
-                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4" style={{ ['--eq-color' as string]: '#111827' }}>
+              <div className="flex items-center justify-between gap-2 border-b pb-3">
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <Music size={18} /> 集中BGM
+                </h2>
+                <span
+                  className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                    isPlayingBgm ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'
+                  }`}
+                  style={isPlayingBgm ? ({ ['--eq-color' as string]: '#ffffff' } as React.CSSProperties) : undefined}
+                >
+                  {isPlayingBgm && <Equalizer playing className="scale-75" />}
+                  {isPlayingBgm ? `再生中：${SIMPLE_BGM.find((t) => t.id === bgmType)?.name ?? ''}` : '停止中'}
+                </span>
               </div>
+
+              {/* 曲を押すと再生。再生中の曲をもう一度押すと停止 */}
+              <div className="space-y-2">
+                {SIMPLE_BGM.map((t) => {
+                  const selected = bgmType === t.id;
+                  const playing = selected && isPlayingBgm;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => playBgmTrack(t.id)}
+                      aria-pressed={playing}
+                      className={`w-full flex items-center gap-3 p-3 rounded-2xl border text-left transition ${
+                        playing
+                          ? 'bg-gray-900 border-gray-900 text-white shadow-sm'
+                          : selected
+                          ? 'bg-gray-50 border-gray-400 text-gray-900'
+                          : 'bg-gray-50 border-gray-200 text-gray-800 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span
+                        className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${
+                          playing ? 'bg-white/15 text-white' : 'bg-white text-gray-700 border border-gray-200'
+                        }`}
+                      >
+                        {t.icon}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-bold">{t.name}</span>
+                        <span className={`block text-[11px] truncate ${playing ? 'text-white/70' : 'text-gray-500'}`}>{t.desc}</span>
+                      </span>
+                      <span
+                        className={`shrink-0 flex items-center gap-2 ${playing ? 'text-white' : 'text-gray-500'}`}
+                        style={playing ? ({ ['--eq-color' as string]: '#ffffff' } as React.CSSProperties) : undefined}
+                      >
+                        {playing && <Equalizer playing />}
+                        {playing ? <Pause size={18} /> : <Play size={18} />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 音量 */}
+              <label className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl px-3 py-2.5">
+                {bgmVolume === 0 ? <VolumeX size={18} className="text-gray-500 shrink-0" /> : <Volume2 size={18} className="text-gray-500 shrink-0" />}
+                <span className="text-xs font-bold text-gray-700 shrink-0">音量</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={bgmVolume}
+                  onChange={(e) => setBgmVolume(Number(e.target.value))}
+                  className="flex-1 accent-gray-900 cursor-pointer"
+                  aria-label="BGMの音量"
+                />
+                <span className="w-9 text-right text-[11px] font-bold text-gray-600">{Math.round(bgmVolume * 100)}%</span>
+              </label>
 
               <button
                 onClick={toggleBgm}
-                className={`w-full py-3.5 rounded-2xl font-bold text-white transition flex items-center justify-center gap-2 shadow-sm ${
-                  isPlayingBgm ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-900 hover:bg-gray-800'
+                className={`w-full py-3 rounded-2xl font-bold text-sm transition flex items-center justify-center gap-2 ${
+                  isPlayingBgm ? 'bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200' : 'bg-gray-900 hover:bg-gray-800 text-white shadow-sm'
                 }`}
               >
-                {isPlayingBgm ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                {isPlayingBgm ? 'BGMを停止' : 'BGMを再生'}
+                {isPlayingBgm ? <Pause size={16} /> : <Play size={16} />}
+                {isPlayingBgm ? 'BGMを停止' : `${SIMPLE_BGM.find((t) => t.id === bgmType)?.name ?? ''}を再生`}
               </button>
             </div>
 
