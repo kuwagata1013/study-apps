@@ -18,8 +18,11 @@ import {
   Sparkles,
   Gem,
   RefreshCw,
-  Lock
+  Lock,
+  LogOut
 } from 'lucide-react';
+import { signOut } from 'firebase/auth';
+import { auth } from '../../firebase';
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
@@ -1000,6 +1003,28 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                         <Lock size={16} />
                         管理者用分析ページ（管理者アカウント限定）
                       </button>
+
+                      {user && (
+                        <button
+                          onClick={async () => {
+                            if (isActive) {
+                              alert('計測中はログアウトできません。一度一時停止してください。');
+                              return;
+                            }
+                            if (!confirm('ログアウトしますか？')) return;
+                            try {
+                              await signOut(auth);
+                            } catch (error) {
+                              console.error('ログアウトエラー:', error);
+                              alert('ログアウトできませんでした。通信状態を確認してください');
+                            }
+                          }}
+                          className="w-full py-3 bg-red-900/30 hover:bg-red-900/50 text-red-200 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-red-400/30"
+                        >
+                          <LogOut size={16} />
+                          ログアウト
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
