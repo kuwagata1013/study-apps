@@ -27,8 +27,15 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
   const [nameInput, setNameInput] = useState('');
   const [nameSaving, setNameSaving] = useState(false);
   const [nameError, setNameError] = useState('');
-  const showNameForm = !!user && (nameStatus === 'missing' || editingName);
   const needsName = !!user && nameStatus !== 'ready';
+  // 名前のステップは、名前がまだ決まっていないときと変更中だけ出す（決まっていれば STEP 1 に名前を表示する）
+  const showNameStep = !!user && (nameStatus !== 'ready' || editingName);
+  const idStep = showNameStep ? 3 : 2;
+  const startEditingName = () => {
+    setNameInput(playerName);
+    setNameError('');
+    setEditingName(true);
+  };
 
   const handleSaveName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,8 +121,8 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
           </span>
 
           {user ? (
-            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-3 min-w-0">
                 {/* アイコン表示部分（URL・ローカル画像参照のブロック回避処理含む） */}
                 <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 border border-gray-200 flex items-center justify-center shrink-0">
                   {user.photoURL ? (
@@ -129,8 +136,23 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
                     <User size={20} className="text-gray-400" />
                   )}
                 </div>
-                <div className="text-left overflow-hidden">
-                  <p className="text-sm font-bold text-gray-900 truncate">{playerName || 'ログイン中'}</p>
+                <div className="text-left min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className={`text-sm font-bold truncate ${playerName ? 'text-gray-900' : 'text-gray-400'}`}>
+                      {playerName || (nameStatus === 'checking' ? '名前を確認中...' : 'プレイヤー名 未設定')}
+                    </p>
+                    {nameStatus === 'ready' && !editingName && (
+                      <button
+                        type="button"
+                        onClick={startEditingName}
+                        aria-label="プレイヤー名を変更"
+                        title="プレイヤー名を変更"
+                        className="shrink-0 p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    )}
+                  </div>
                   <p className="text-[10px] text-gray-400 truncate">{user.email}</p>
                 </div>
               </div>
@@ -155,92 +177,72 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
           )}
         </div>
 
-        {/* STEP 2: プレイヤー名 */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
-          <div className="text-center">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              STEP 2: プレイヤー名を決める
-            </span>
-          </div>
-
-          {!user ? (
-            <p className="text-[11px] text-gray-400 text-center">ログインすると、フレンドに見せる名前を決められます（ゲストは不要です）</p>
-          ) : nameStatus === 'checking' ? (
-            <p className="text-xs text-gray-400 text-center py-2">確認中...</p>
-          ) : showNameForm ? (
-            <form onSubmit={handleSaveName} className="space-y-1.5">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
-                <UserRound size={14} /> プレイヤー名（{MAX_NAME_LENGTH}文字まで）
+        {/* STEP 2: プレイヤー名（ログインしていて、名前がまだのときと変更中だけ） */}
+        {showNameStep && (
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
+            <div className="text-center">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                STEP 2: {editingName ? 'プレイヤー名を変更' : 'プレイヤー名を決める'}
               </span>
-              <div className="flex items-center gap-2">
-                <input
-                  value={nameInput}
-                  maxLength={MAX_NAME_LENGTH}
-                  onChange={(e) => {
-                    setNameInput(e.target.value);
-                    setNameError('');
-                  }}
-                  autoComplete="off"
-                  placeholder="ニックネームを入力"
-                  className={`flex-1 min-w-0 px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 ${
-                    nameError ? 'border-red-400' : 'border-gray-200'
-                  }`}
-                />
-                <button
-                  type="submit"
-                  disabled={!normalizeName(nameInput) || nameSaving}
-                  className="shrink-0 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition disabled:opacity-40"
-                >
-                  {nameSaving ? '確認中' : '決定'}
-                </button>
-                {editingName && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingName(false);
+            </div>
+
+            {nameStatus === 'checking' ? (
+              <p className="text-xs text-gray-400 text-center py-2">確認中...</p>
+            ) : (
+              <form onSubmit={handleSaveName} className="space-y-1.5">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                  <UserRound size={14} /> プレイヤー名（{MAX_NAME_LENGTH}文字まで）
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={nameInput}
+                    maxLength={MAX_NAME_LENGTH}
+                    onChange={(e) => {
+                      setNameInput(e.target.value);
                       setNameError('');
                     }}
-                    className="shrink-0 px-2 py-2.5 text-xs text-gray-400 hover:text-gray-600"
+                    autoComplete="off"
+                    placeholder="ニックネームを入力"
+                    className={`flex-1 min-w-0 px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 ${
+                      nameError ? 'border-red-400' : 'border-gray-200'
+                    }`}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!normalizeName(nameInput) || nameSaving}
+                    className="shrink-0 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition disabled:opacity-40"
                   >
-                    やめる
+                    {nameSaving ? '確認中' : '決定'}
                   </button>
+                  {editingName && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingName(false);
+                        setNameError('');
+                      }}
+                      className="shrink-0 px-2 py-2.5 text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      やめる
+                    </button>
+                  )}
+                </div>
+                {nameError ? (
+                  <p className="text-[11px] text-red-500 font-bold">{nameError}</p>
+                ) : (
+                  <p className="text-[10px] text-gray-400">フレンドはこの名前であなたを探せます。本名ではなくニックネームがおすすめです</p>
                 )}
-              </div>
-              {nameError ? (
-                <p className="text-[11px] text-red-500 font-bold">{nameError}</p>
-              ) : (
-                <p className="text-[10px] text-gray-400">フレンドはこの名前であなたを探せます。本名ではなくニックネームがおすすめです</p>
-              )}
-            </form>
-          ) : (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2 p-3 bg-gray-50 rounded-2xl border border-gray-100">
-                <span className="flex items-center gap-2 min-w-0">
-                  <UserRound size={16} className="text-gray-500 shrink-0" />
-                  <span className="text-sm font-bold text-gray-900 truncate">{playerName}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNameInput(playerName);
-                    setNameError('');
-                    setEditingName(true);
-                  }}
-                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-[11px] font-bold hover:bg-white transition"
-                >
-                  <Pencil size={12} /> 変更
-                </button>
-              </div>
-              {nameError && <p className="text-[11px] text-red-500 font-bold">{nameError}</p>}
-            </div>
-          )}
-        </div>
+              </form>
+            )}
+            {nameStatus === 'checking' && nameError && <p className="text-[11px] text-red-500 font-bold text-center">{nameError}</p>}
+          </div>
+        )}
 
-        {/* STEP 3: 参加者ID */}
+        {/* 参加者ID */}
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
           <div className="text-center">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              STEP 3: 参加者IDを入力
+              STEP {idStep}: 参加者IDを入力
             </span>
           </div>
           <label className="block">
@@ -271,11 +273,11 @@ export const StartApp: React.FC<StartAppProps> = ({ onSelectMode, user, playerNa
           )}
         </div>
 
-        {/* STEP 4: モード選択エリア */}
+        {/* モード選択エリア */}
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
           <div className="text-center">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              STEP 4: モードを選択して開始
+              STEP {idStep + 1}: モードを選択して開始
             </span>
           </div>
 
