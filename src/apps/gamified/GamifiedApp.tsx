@@ -11,8 +11,6 @@ import {
   Play, 
   Pause, 
   RotateCcw, 
-  Plus, 
-  Trash2, 
   Volume2, 
   VolumeX, 
   Sparkles,
@@ -69,10 +67,22 @@ const WALK_FRAMES: [number, number][] = [
 const WALK_FRAME_COUNT = WALK_FRAMES.length;
 const WALK_FRAME_MS = 140; // 1コマの表示時間（ミリ秒）
 import { saveResearchLog } from '../../lib/researchLog';
+import {
+  ALL_CLEAR_EXP,
+  TIER_LABEL,
+  isQuestDone,
+  loadAllClearDays,
+  loadQuestClears,
+  questProgress,
+  questTarget,
+  questsFor,
+  saveAllClearDays,
+  saveQuestClears,
+  type DailyQuest,
+  type QuestClear,
+  type QuestLog
+} from './dailyQuests';
 import { getParticipantId } from '../../lib/participant';
-
-// 以前の版で最初から入っていた見本クエスト（保存データからも取り除く）
-const SAMPLE_TASK_IDS = ['daily_login', 'timer_1min'];
 
 interface GamifiedAppProps {
   user?: any;
@@ -81,23 +91,21 @@ interface GamifiedAppProps {
   onResetMode?: () => void;
 }
 
-interface StudyLog {
-  id: string;
-  subject: string;
-  durationMinutes: number;
-  expGained: number;
-  createdAt: string;
-  memo: string;
-}
+const TIER_STYLE: Record<DailyQuest['tier'], string> = {
+  easy: 'text-sky-200 bg-sky-500/15 border-sky-400/30',
+  normal: 'text-amber-200 bg-amber-500/15 border-amber-400/30',
+  hard: 'text-rose-200 bg-rose-500/15 border-rose-400/30'
+};
 
-interface Task {
+// 学習記録（クエストの判定に使う項目も持つ）
+type StudyLog = QuestLog;
+
+// 以前の版の、自分で作るクエスト（クリアしたものだけカレンダーの記録に引き継ぐ）
+interface OldTask {
   id: string;
   title: string;
   completed: boolean;
-  isAutomatic?: boolean;
-  subject?: string;
-  targetMinutes?: number;
-  completedDateKey?: string; // クリアした日（YYYY-MM-DD）
+  completedDateKey?: string;
 }
 
 export const GamifiedApp: React.FC<GamifiedAppProps> = ({
@@ -141,12 +149,9 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
   // 4. データステート
   const [logs, setLogs] = useState<StudyLog[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  
-  // 新規クエスト作成用ステート
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskSubject, setNewTaskSubject] = useState('英語');
-  const [newTaskMinutes, setNewTaskMinutes] = useState(1);
+  // デイリークエストのクリア記録と、3つ全部クリアした日
+  const [questClears, setQuestClears] = useState<QuestClear[]>([]);
+  const [allClearDays, setAllClearDays] = useState<string[]>([]);
 
   // 5. BGM関連ステート
   const {
@@ -215,16 +220,24 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     const todayStr = new Date().toLocaleDateString('ja-JP');
     const lastLoginDate = localStorage.getItem('gamified_last_login_date');
 
-    // クエストは最初は空。以前の版で最初から入っていた見本クエストは取り除く
-    let loadedTasks: Task[] = [];
-    const savedTasks = localStorage.getItem('gamified_tasks');
-    if (savedTasks) {
+    // デイリークエストのクリア記録。以前の版で自分で作ってクリアしたクエストは、記録として引き継ぐ
+    let clears = loadQuestClears();
+    const oldTasksRaw = localStorage.getItem('gamified_tasks');
+    if (oldTasksRaw) {
       try {
-        loadedTasks = (JSON.parse(savedTasks) as Task[]).filter((t) => !SAMPLE_TASK_IDS.includes(t.id));
+        const old = (JSON.parse(oldTasksRaw) as OldTask[]).filter((t) => t.completed && t.completedDateKey);
+        clears = [
+          ...clears,
+          ...old.map((t) => ({ id: `old:${t.id}`, title: t.title, dateKey: t.completedDateKey as string, exp: 0 }))
+        ];
+        saveQuestClears(clears);
       } catch {
-        loadedTasks = [];
+        // 読めなければ引き継がない
       }
+      localStorage.removeItem('gamified_tasks');
     }
+    setQuestClears(clears);
+    setAllClearDays(loadAllClearDays());
 
     if (lastLoginDate !== todayStr) {
       localStorage.setItem('gamified_last_login_date', todayStr);
@@ -232,8 +245,6 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       alert(`🌟 デイリーログインボーナス！ 本日最初のログインで +50 EXP を獲得しました！`);
     }
 
-    setTasks(loadedTasks);
-    localStorage.setItem('gamified_tasks', JSON.stringify(loadedTasks));
 
     // --- ライフクリスタルで連続記録を守る（1日1回だけ確認） ---
     const todayKey = dayKey(new Date());
@@ -358,34 +369,31 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       }
     }
   };
-  // クエスト自動達成判定
-  const checkAndUpdateAutomaticTasks = (savedSubject: string, targetLogs: StudyLog[]) => {
-    const todayStr = new Date().toLocaleDateString('ja-JP');
-    let newlyCompletedCount = 0;
-
-    const updated = tasks.map(task => {
-      if (task.completed) return task;
-
-      if (task.targetMinutes !== undefined && task.subject && task.subject === savedSubject) {
-        const subjectTotalMinutes = targetLogs
-          .filter(l => l.createdAt.includes(todayStr.split(' ')[0]) && l.subject === task.subject)
-          .reduce((sum, l) => sum + l.durationMinutes, 0);
-
-        if (subjectTotalMinutes >= task.targetMinutes) {
-          newlyCompletedCount++;
-          trackEvent('quest_complete', { label: task.title, count: task.targetMinutes });
-          return { ...task, completed: true, completedDateKey: dayKey(new Date()) };
-        }
+  // デイリークエストの判定（記録したときに呼ぶ）。新しくクリアしたものと、もらえる EXP を返す
+  const judgeDailyQuests = (targetLogs: StudyLog[]) => {
+    const now = new Date();
+    const todayKey = dayKey(now);
+    const quests = questsFor(now);
+    const clearedIds = new Set(questClears.map((c) => c.id));
+    const newly = quests.filter((q) => !clearedIds.has(q.id) && isQuestDone(q, targetLogs, now));
+    let exp = newly.reduce((sum, q) => sum + q.exp, 0);
+    let allClear = false;
+    if (newly.length > 0) {
+      const nextClears = [...questClears, ...newly.map((q) => ({ id: q.id, title: q.title, dateKey: todayKey, exp: q.exp }))];
+      setQuestClears(nextClears);
+      saveQuestClears(nextClears);
+      newly.forEach((q) => trackEvent('quest_complete', { label: `${TIER_LABEL[q.tier]}:${q.title}`, count: q.exp }));
+      const nowCleared = new Set(nextClears.map((c) => c.id));
+      if (quests.every((q) => nowCleared.has(q.id)) && !allClearDays.includes(todayKey)) {
+        allClear = true;
+        exp += ALL_CLEAR_EXP;
+        const nextDays = [...allClearDays, todayKey];
+        setAllClearDays(nextDays);
+        saveAllClearDays(nextDays);
+        trackEvent('quest_complete', { label: 'all_clear', count: ALL_CLEAR_EXP });
       }
-      return task;
-    });
-
-    if (newlyCompletedCount > 0) {
-      setTasks(updated);
-      localStorage.setItem('gamified_tasks', JSON.stringify(updated));
     }
-
-    return newlyCompletedCount;
+    return { newly, exp, allClear };
   };
 
   const handleSaveLog = async () => {
@@ -410,9 +418,13 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       id: Date.now().toString(),
       subject,
       durationMinutes,
+      durationSeconds: seconds,
       expGained: baseTimeExp + streakExp + focusExp,
       createdAt: new Date().toLocaleString('ja-JP'),
-      memo
+      memo,
+      // クエストの判定用：止めずに続けた最長と、減算を最後まで走りきったか
+      bestRunSeconds: Math.max(bestRun, runSeconds),
+      countdownMinutes: timerMode === 'countdown' && seconds >= targetMinutes * 60 ? targetMinutes : undefined
     };
 
     const updatedLogs = [newLog, ...logs];
@@ -423,8 +435,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     setLastStudyTime(now);
     localStorage.setItem('gamified_last_study_time', now.toString());
 
-    const newlyCompletedCount = checkAndUpdateAutomaticTasks(subject, updatedLogs);
-    const questExp = 50 * newlyCompletedCount;
+    const questResult = judgeDailyQuests(updatedLogs);
+    const questExp = questResult.exp;
     const totalExpGained = baseTimeExp + streakExp + focusExp + questExp;
 
     // ライフクリスタル：宝箱と、連続7日ごとのごほうび
@@ -452,7 +464,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     if (focused) {
       lines.push(`🎁 集中ボーナス！ 25分続けたごほうびの宝箱から +${focusExp} EXP${chestCrystal ? ' ＋ 💎 ライフクリスタル' : ''}`);
     }
-    if (newlyCompletedCount > 0) lines.push(`🎯 クエスト ${newlyCompletedCount} 件クリア +${questExp} EXP`);
+    questResult.newly.forEach((q) => lines.push(`🎯 クエスト「${q.title}」クリア +${q.exp} EXP`));
+    if (questResult.allClear) lines.push(`🏆 今日のクエストを全部クリア！ ボーナス +${ALL_CLEAR_EXP} EXP`);
     if (streakReward) lines.push(`💎 連続 ${streakNow} 日達成！ ライフクリスタルを1個獲得`);
     lines.push(`合計 +${totalExpGained} EXP 獲得！`);
     alert(lines.join('\n'));
@@ -480,36 +493,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     setMemo('');
   };
 
-  const handleAddTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-    
-    const minutes = Math.max(1, Number(newTaskMinutes) || 1);
-
-    const newTask: Task = {
-      id: Date.now().toString(),
-      title: newTaskTitle,
-      completed: false,
-      isAutomatic: true,
-      subject: newTaskSubject,
-      targetMinutes: minutes
-    };
-
-    trackEvent('quest_add', { label: newTask.title, count: minutes });
-    const updated = [...tasks, newTask];
-    setTasks(updated);
-    localStorage.setItem('gamified_tasks', JSON.stringify(updated));
-    setNewTaskTitle('');
-    setNewTaskMinutes(1);
-  };
-
-  const deleteTask = (id: string) => {
-    const target = tasks.find((t) => t.id === id);
-    if (target) trackEvent('quest_delete', { label: target.title });
-    const updated = tasks.filter(t => t.id !== id);
-    setTasks(updated);
-    localStorage.setItem('gamified_tasks', JSON.stringify(updated));
-  };
+  // 今日のデイリークエストと、クリアの状況
+  const todayQuests: DailyQuest[] = questsFor(new Date());
+  const clearedToday = new Set(questClears.filter((c) => todayQuests.some((q) => q.id === c.id)).map((c) => c.id));
+  const allClearedToday = allClearDays.includes(dayKey(new Date()));
+  // 戦績のカレンダーに出すクリアしたクエスト
+  const calendarQuests = questClears.map((c) => ({ id: c.id, title: c.title, completed: true, completedDateKey: c.dateKey }));
 
   const formatTime = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60);
@@ -819,109 +808,62 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                       </h2>
                     </div>
 
-                    <form onSubmit={handleAddTask} className="bg-[#1f140d]/80 p-3.5 rounded-2xl border border-[#fdd69f]/15 space-y-3">
-                      <p className="text-xs font-bold text-white flex items-center gap-1">
-                        <Plus size={14} /> 新しいクエストを作成
-                      </p>
-                  
-                      <input
-                        type="text"
-                        value={newTaskTitle}
-                        onChange={(e) => setNewTaskTitle(e.target.value)}
-                        placeholder="クエスト名（例: 数学の基礎固め）"
-                        className="w-full px-3.5 py-2.5 bg-[#312117] border border-[#fdd69f]/15 rounded-xl text-xs text-white focus:outline-none focus:border-[#fdd69f]/30"
-                      />
+                    <p className="text-[11px] text-white/70 leading-relaxed">
+                      毎日3つのクエストが出ます（全員同じ・毎日0時に入れ替わり）。学習を記録したときに自動でクリアになります。
+                    </p>
 
-                      <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
-                        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
-                          <span className="text-[10px] text-white/65 font-bold shrink-0">教科:</span>
-                          {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
-                            <button
-                              key={sub}
-                              type="button"
-                              onClick={() => setNewTaskSubject(sub)}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition shrink-0 ${
-                                newTaskSubject === sub 
-                                  ? 'bg-[#fdd69f] text-[#312117] border border-[#fdd69f]' 
-                                  : 'bg-[#312117] text-white/65 border border-[#fdd69f]/15 hover:bg-[#4a3424]'
-                              }`}
-                            >
-                              {sub}
-                            </button>
-                          ))}
-                        </div>
-
-                        <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-                          <span className="text-[10px] text-white/65 font-bold shrink-0">目標時間(分):</span>
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={newTaskMinutes}
-                            onChange={(e) => setNewTaskMinutes(Number(e.target.value))}
-                            className="w-20 px-2.5 py-1.5 bg-[#312117] border border-[#fdd69f]/15 rounded-xl text-xs text-white text-center focus:outline-none focus:border-[#fdd69f]/30"
-                          />
-                          <button
-                            type="submit"
-                            className="px-4 py-2 bg-[#fdd69f] text-[#312117] rounded-xl hover:bg-[#ffe3b8] transition shadow-md shadow-black/30 text-xs font-bold shrink-0"
+                    <div className="space-y-2">
+                      {todayQuests.map((q) => {
+                        const done = clearedToday.has(q.id);
+                        const target = questTarget(q);
+                        const progress = Math.min(target, questProgress(q, logs, new Date()));
+                        return (
+                          <div
+                            key={q.id}
+                            className={`p-3.5 rounded-xl border space-y-2 ${
+                              done ? 'bg-emerald-950/30 border-emerald-500/40' : 'bg-[#4a3424]/25 border-[#fdd69f]/30'
+                            }`}
                           >
-                            追加
-                          </button>
-                        </div>
-                      </div>
-                    </form>
-
-                    <div className="space-y-2 pt-2">
-                      {tasks.map((task) => (
-                        <div 
-                          key={task.id} 
-                          className={`flex items-center justify-between p-3.5 rounded-xl border ${
-                            task.completed 
-                              ? 'bg-emerald-950/20 border-emerald-500/30' 
-                              : 'bg-[#4a3424]/20 border-[#fdd69f]/30'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 text-xs flex-1">
-                            <input
-                              type="checkbox"
-                              checked={task.completed}
-                              disabled={true}
-                              className="w-4 h-4 rounded text-[#312117] focus:ring-[#fdd69f] bg-[#312117] border-[#fdd69f]/25 opacity-75 cursor-not-allowed"
-                            />
-                            <div className="flex flex-col gap-0.5">
-                              <span className={task.completed ? 'line-through text-white/50' : 'text-white font-semibold'}>
-                                {task.title}
-                              </span>
-                              <div className="flex items-center gap-2 text-[10px]">
-                                {task.subject && (
-                                  <span className="text-white bg-[#4a3424]/80 px-1.5 py-0.5 rounded border border-[#fdd69f]/30">
-                                    教科: {task.subject}
-                                  </span>
-                                )}
-                                {task.targetMinutes !== undefined && (
-                                  <span className="text-white/65 bg-[#312117] px-1.5 py-0.5 rounded border border-[#fdd69f]/15">
-                                    目標: {task.targetMinutes}分以上
-                                  </span>
-                                )}
-                                <span className="text-white">※自動判定</span>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <span
+                                  className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full border mb-1 ${TIER_STYLE[q.tier]}`}
+                                >
+                                  {TIER_LABEL[q.tier]}
+                                </span>
+                                <p className={`text-xs font-bold ${done ? 'text-white/60 line-through' : 'text-white'}`}>{q.title}</p>
                               </div>
+                              <span
+                                className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  done ? 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30' : 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20'
+                                }`}
+                              >
+                                {done ? 'クリア！' : `+${q.exp} EXP`}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1.5 rounded-full bg-black/40 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${done ? 'bg-emerald-400' : 'bg-[#fdd69f]'}`}
+                                  style={{ width: `${(progress / target) * 100}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-bold text-white/70 w-16 text-right">
+                                {q.kind === 'countdown' ? (done ? '達成' : 'まだ') : `${progress} / ${target}${q.unit}`}
+                              </span>
                             </div>
                           </div>
-                      
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-yellow-400 font-bold bg-yellow-400/10 border border-yellow-400/20 px-2 py-0.5 rounded-full">
-                              +50 EXP
-                            </span>
-                            <button
-                              onClick={() => deleteTask(task.id)}
-                              className="text-white/50 hover:text-red-400 transition"
-                              title="削除"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
+                    </div>
+
+                    <div
+                      className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between ${
+                        allClearedToday ? 'bg-yellow-400/15 border-yellow-400/40 text-yellow-200' : 'bg-black/20 border-[#fdd69f]/15 text-white/70'
+                      }`}
+                    >
+                      <span>🏆 3つ全部クリアでボーナス</span>
+                      <span>{allClearedToday ? 'クリア！' : `+${ALL_CLEAR_EXP} EXP（${clearedToday.size} / 3）`}</span>
                     </div>
                   </div>
 
@@ -930,7 +872,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
                 {/* 戦績タブ */}
                 {activeTab === 'stats' && (
-                  <GameStats level={level} exp={exp} maxExp={maxExp} lifeTokens={lifeTokens} protectedDays={protectedDays} logs={logs} tasks={tasks} />
+                  <GameStats level={level} exp={exp} maxExp={maxExp} lifeTokens={lifeTokens} protectedDays={protectedDays} logs={logs} tasks={calendarQuests} />
                 )}
 
                 {/* BGMタブ */}

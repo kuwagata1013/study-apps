@@ -218,7 +218,8 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
         <Tile
           icon={<ListChecks size={12} />}
           label="クエスト達成"
-          value={`${completedQuests} / ${tasks.length}`}
+          value={`${completedQuests} 件`}
+          sub="デイリークエストのクリア数"
           accent="text-pink-300"
         />
         <Tile
