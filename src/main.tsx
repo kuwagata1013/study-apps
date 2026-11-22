@@ -4,13 +4,14 @@ import './index.css'
 import App from './App.tsx'
 import OfflineBadge from './offline/OfflineBadge.tsx'
 import { syncDataset } from './lib/dataset.ts'
+import { syncQuestConfig } from './lib/questConfig.ts'
 
 // オフライン版（npm run build:offline）のときだけ「オフライン版」表示を出す
 const isOffline = import.meta.env.MODE === 'offline'
 
 // 画面を出す前に、記録期間（データ1・データ2 など）が切り替わっていないか確認する。
-// 切り替わっていれば端末の進み具合を切り替えてから表示する
-syncDataset().then((change) => {
+// 切り替わっていれば端末の進み具合を切り替えてから表示する。あわせてデイリークエストの設定も読み込む
+Promise.all([syncDataset(), syncQuestConfig()]).then(([change]) => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />

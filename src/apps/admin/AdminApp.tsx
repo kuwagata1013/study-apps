@@ -9,12 +9,14 @@ import {
   Upload, 
   Play, 
   Pause,
-  Users
+  Users,
+  ListChecks
 } from 'lucide-react';
 import ResearchDataPanel from './ResearchDataPanel';
 import ParticipantAccountsPanel from './ParticipantAccountsPanel';
 import IssueAccountsForm from './IssueAccountsForm';
 import AdminAccountsPanel from './AdminAccountsPanel';
+import QuestSettingsPanel from './QuestSettingsPanel';
 import { auth } from '../../firebase';
 import { recordAdminProfile } from '../../lib/admins';
 import { BGM_SOURCES } from '../../lib/bgm';
@@ -41,7 +43,7 @@ const DEFAULT_BGM_LIST: BgmTrack[] = [
 const DEFAULT_IDS = new Set(DEFAULT_BGM_LIST.map((t) => t.id));
 
 export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
-  const [activeTab, setActiveTab] = useState<'bgm' | 'database' | 'accounts'>('bgm');
+  const [activeTab, setActiveTab] = useState<'bgm' | 'database' | 'accounts' | 'quests'>('bgm');
   // 発行したら一覧を読み直す
   const [accountsVersion, setAccountsVersion] = useState(0);
 
@@ -198,6 +200,15 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
           >
             <Users size={16} /> 参加者アカウント
           </button>
+
+          <button
+            onClick={() => setActiveTab('quests')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+              activeTab === 'quests' ? 'bg-sky-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <ListChecks size={16} /> クエスト
+          </button>
         </div>
 
         {/* ===== TAB 1: BGM追加 ＆ 削除 ===== */}
@@ -315,6 +326,9 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
             <ParticipantAccountsPanel key={accountsVersion} />
           </div>
         )}
+
+        {/* ===== TAB 4: デイリークエストの設定 ===== */}
+        {activeTab === 'quests' && <QuestSettingsPanel />}
 
       </main>
 

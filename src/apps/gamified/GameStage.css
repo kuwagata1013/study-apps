@@ -79,6 +79,34 @@
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), 0 0 18px rgba(253, 214, 159, 0.35);
 }
 
+/* クエスト：受け取れる報酬のボタン（ふんわり光る） */
+@keyframes quest-claim-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(253, 214, 159, 0.55), 0 6px 14px rgba(0, 0, 0, 0.35); }
+  50% { box-shadow: 0 0 0 5px rgba(253, 214, 159, 0), 0 6px 14px rgba(0, 0, 0, 0.35); }
+}
+.quest-claim-btn {
+  animation: quest-claim-glow 1.6s ease-in-out infinite;
+}
+
+/* クエスト：受け取ったときに浮かび上がる「+○○ EXP」 */
+@keyframes quest-reward-pop {
+  0% { opacity: 0; transform: translate(-50%, 10px) scale(0.8); }
+  15% { opacity: 1; transform: translate(-50%, 0) scale(1.08); }
+  70% { opacity: 1; transform: translate(-50%, -18px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -36px) scale(1); }
+}
+.quest-reward-pop {
+  animation: quest-reward-pop 1.4s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quest-claim-btn,
+  .quest-reward-pop {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+}
+
 /* 音量スライダー */
 .bgm-volume {
   -webkit-appearance: none;

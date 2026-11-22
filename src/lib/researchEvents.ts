@@ -19,6 +19,7 @@ export type ResearchEventType =
   | 'tap_summary' // 画面タップの集計（count = タップ数、seconds = 集計した秒数）
   | 'quest_add' // クエスト／ToDo を追加
   | 'quest_complete' // 達成
+  | 'quest_claim' // デイリークエストの報酬を受け取った（label = クエスト名／all_clear、count = EXP）
   | 'quest_uncomplete' // 達成を取り消し
   | 'quest_delete' // 削除
   | 'timer_start' // 計測開始・再開

@@ -14,6 +14,8 @@ import {
   Volume2, 
   VolumeX, 
   Sparkles,
+  Gift,
+  Check,
   Timer,
   Gem,
   RefreshCw,
@@ -68,8 +70,7 @@ const WALK_FRAME_COUNT = WALK_FRAMES.length;
 const WALK_FRAME_MS = 140; // 1コマの表示時間（ミリ秒）
 import { saveResearchLog } from '../../lib/researchLog';
 import {
-  ALL_CLEAR_EXP,
-  TIER_LABEL,
+  allClearExp,
   isQuestDone,
   loadAllClearDays,
   loadQuestClears,
@@ -78,7 +79,6 @@ import {
   questsFor,
   saveAllClearDays,
   saveQuestClears,
-  type DailyQuest,
   type QuestClear,
   type QuestLog
 } from './dailyQuests';
@@ -91,10 +91,67 @@ interface GamifiedAppProps {
   onResetMode?: () => void;
 }
 
-const TIER_STYLE: Record<DailyQuest['tier'], string> = {
-  easy: 'text-sky-200 bg-sky-500/15 border-sky-400/30',
-  normal: 'text-amber-200 bg-amber-500/15 border-amber-400/30',
-  hard: 'text-rose-200 bg-rose-500/15 border-rose-400/30'
+// クエストの1行：左に報酬、真ん中にクエスト名、右上に進み具合のバー、右下にボタン
+const QuestRow: React.FC<{
+  title: string;
+  exp: number;
+  progress: number;
+  target: number;
+  progressText: string;
+  done: boolean;
+  claimed: boolean;
+  bonus?: boolean;
+  onClaim: (el: HTMLElement) => void;
+}> = ({ title, exp, progress, target, progressText, done, claimed, bonus, onClaim }) => {
+  const ready = done && !claimed;
+  return (
+    <div
+      className={`flex items-stretch gap-3 px-3.5 py-2.5 rounded-lg border transition ${
+        claimed
+          ? 'bg-black/25 border-white/10 opacity-70'
+          : ready
+            ? 'bg-gradient-to-r from-[#5a4029] to-[#3a281b] border-[#fdd69f]/70'
+            : bonus
+              ? 'bg-black/20 border-dashed border-[#fdd69f]/30'
+              : 'bg-gradient-to-r from-[#4a3424]/80 to-[#312117]/80 border-[#fdd69f]/25'
+      }`}
+    >
+      {/* クエスト名 */}
+      <div className="flex-1 min-w-0 self-center">
+        <p className={`text-[13px] font-black leading-snug ${claimed ? 'text-white/60' : 'text-white'}`}>{title}</p>
+        <p className="text-[10px] font-bold text-[#fdd69f]/70 mt-0.5">報酬 {exp} EXP</p>
+      </div>
+
+      {/* 右上：バー／右下：ボタン */}
+      <div className="w-[88px] sm:w-[104px] shrink-0 flex flex-col justify-between gap-2">
+        <div className="relative h-4 rounded-sm bg-black/50 border border-[#fdd69f]/25 overflow-hidden">
+          <div
+            className={`h-full transition-all ${claimed ? 'bg-white/25' : done ? 'bg-emerald-500' : 'bg-[#c98a3e]'}`}
+            style={{ width: `${target > 0 ? (progress / target) * 100 : 0}%` }}
+          />
+          <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-white [text-shadow:0_1px_0_rgba(0,0,0,0.8)]">
+            {progressText}
+          </span>
+        </div>
+        {claimed ? (
+          <span className="h-9 rounded-md bg-black/30 border border-white/10 text-white/50 text-[11px] font-black flex items-center justify-center gap-1">
+            <Check size={12} strokeWidth={3} /> 受取済み
+          </span>
+        ) : ready ? (
+          <button
+            onClick={(e) => onClaim(e.currentTarget)}
+            className="quest-claim-btn h-9 rounded-md bg-[#fdd69f] hover:bg-[#ffe3b8] border border-[#fff3dc] text-[#312117] text-xs font-black flex items-center justify-center gap-1 active:scale-95 transition"
+          >
+            <Gift size={13} /> 受け取る
+          </button>
+        ) : (
+          <span className="h-9 rounded-md bg-black/30 border border-[#fdd69f]/15 text-[#fdd69f]/45 text-[11px] font-black flex items-center justify-center">
+            未達成
+          </span>
+        )}
+      </div>
+    </div>
+  );
 };
 
 // 学習記録（クエストの判定に使う項目も持つ）
@@ -149,7 +206,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
   // 4. データステート
   const [logs, setLogs] = useState<StudyLog[]>([]);
-  // デイリークエストのクリア記録と、3つ全部クリアした日
+  // デイリークエストの受け取りの記録と、クリアボーナスを受け取った日
   const [questClears, setQuestClears] = useState<QuestClear[]>([]);
   const [allClearDays, setAllClearDays] = useState<string[]>([]);
 
@@ -369,31 +426,52 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       }
     }
   };
-  // デイリークエストの判定（記録したときに呼ぶ）。新しくクリアしたものと、もらえる EXP を返す
-  const judgeDailyQuests = (targetLogs: StudyLog[]) => {
+  // デイリークエストの達成判定（記録したときに呼ぶ）。この記録で新しく達成したクエストを返す
+  // EXP はクエストタブの「受け取る」で渡す
+  const judgeDailyQuests = (beforeLogs: StudyLog[], afterLogs: StudyLog[]) => {
     const now = new Date();
-    const todayKey = dayKey(now);
+    const newly = questsFor(now).filter((q) => !isQuestDone(q, beforeLogs, now) && isQuestDone(q, afterLogs, now));
+    newly.forEach((q) => trackEvent('quest_complete', { label: q.title, count: q.exp }));
+    return newly;
+  };
+
+  // 受け取ったときに浮かび上がる「+○○ EXP」
+  const [rewardPop, setRewardPop] = useState<{ exp: number; key: number } | null>(null);
+
+  // 報酬を受け取る。questIds のクエストと、bonus が true ならクリアボーナスも（まとめて受け取るにも使う）
+  const claimRewards = (questIds: string[], bonus: boolean, from?: HTMLElement | null) => {
+    const now = new Date();
+    const key = dayKey(now);
     const quests = questsFor(now);
-    const clearedIds = new Set(questClears.map((c) => c.id));
-    const newly = quests.filter((q) => !clearedIds.has(q.id) && isQuestDone(q, targetLogs, now));
-    let exp = newly.reduce((sum, q) => sum + q.exp, 0);
-    let allClear = false;
-    if (newly.length > 0) {
-      const nextClears = [...questClears, ...newly.map((q) => ({ id: q.id, title: q.title, dateKey: todayKey, exp: q.exp }))];
+    const claimable = quests.filter(
+      (q) => questIds.includes(q.id) && !questClears.some((c) => c.id === q.id) && isQuestDone(q, logs, now)
+    );
+    let total = claimable.reduce((sum, q) => sum + q.exp, 0);
+    if (claimable.length > 0) {
+      const nextClears = [...questClears, ...claimable.map((q) => ({ id: q.id, title: q.title, dateKey: key, exp: q.exp }))];
       setQuestClears(nextClears);
       saveQuestClears(nextClears);
-      newly.forEach((q) => trackEvent('quest_complete', { label: `${TIER_LABEL[q.tier]}:${q.title}`, count: q.exp }));
-      const nowCleared = new Set(nextClears.map((c) => c.id));
-      if (quests.every((q) => nowCleared.has(q.id)) && !allClearDays.includes(todayKey)) {
-        allClear = true;
-        exp += ALL_CLEAR_EXP;
-        const nextDays = [...allClearDays, todayKey];
-        setAllClearDays(nextDays);
-        saveAllClearDays(nextDays);
-        trackEvent('quest_complete', { label: 'all_clear', count: ALL_CLEAR_EXP });
-      }
+      claimable.forEach((q) => trackEvent('quest_claim', { label: q.title, count: q.exp }));
     }
-    return { newly, exp, allClear };
+    if (bonus && !allClearDays.includes(key) && quests.every((q) => isQuestDone(q, logs, now))) {
+      const nextDays = [...allClearDays, key];
+      setAllClearDays(nextDays);
+      saveAllClearDays(nextDays);
+      trackEvent('quest_claim', { label: 'all_clear', count: allClearExp() });
+      total += allClearExp();
+    }
+    if (total === 0) return;
+
+    // 押したボタンのところから紙吹雪
+    const rect = from?.getBoundingClientRect();
+    const origin = rect
+      ? { x: (rect.left + rect.width / 2) / window.innerWidth, y: (rect.top + rect.height / 2) / window.innerHeight }
+      : { x: 0.5, y: 0.5 };
+    confetti({ particleCount: 45, spread: 65, startVelocity: 28, scalar: 0.8, origin, colors: ['#fdd69f', '#facc15', '#34d399', '#ffffff'] });
+    const popKey = Date.now();
+    setRewardPop({ exp: total, key: popKey });
+    setTimeout(() => setRewardPop((p) => (p && p.key === popKey ? null : p)), 1500);
+    addExp(total);
   };
 
   const handleSaveLog = async () => {
@@ -435,9 +513,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     setLastStudyTime(now);
     localStorage.setItem('gamified_last_study_time', now.toString());
 
-    const questResult = judgeDailyQuests(updatedLogs);
-    const questExp = questResult.exp;
-    const totalExpGained = baseTimeExp + streakExp + focusExp + questExp;
+    const newlyDone = judgeDailyQuests(logs, updatedLogs);
+    const totalExpGained = baseTimeExp + streakExp + focusExp;
 
     // ライフクリスタル：宝箱と、連続7日ごとのごほうび
     let crystalsGained = chestCrystal ? 1 : 0;
@@ -464,8 +541,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     if (focused) {
       lines.push(`🎁 集中ボーナス！ 25分続けたごほうびの宝箱から +${focusExp} EXP${chestCrystal ? ' ＋ 💎 ライフクリスタル' : ''}`);
     }
-    questResult.newly.forEach((q) => lines.push(`🎯 クエスト「${q.title}」クリア +${q.exp} EXP`));
-    if (questResult.allClear) lines.push(`🏆 今日のクエストを全部クリア！ ボーナス +${ALL_CLEAR_EXP} EXP`);
+    newlyDone.forEach((q) => lines.push(`🎯 クエスト「${q.title}」達成！`));
+    if (newlyDone.length > 0) lines.push('（報酬はクエストタブで受け取れます）');
     if (streakReward) lines.push(`💎 連続 ${streakNow} 日達成！ ライフクリスタルを1個獲得`);
     lines.push(`合計 +${totalExpGained} EXP 獲得！`);
     alert(lines.join('\n'));
@@ -494,9 +571,17 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   };
 
   // 今日のデイリークエストと、クリアの状況
-  const todayQuests: DailyQuest[] = questsFor(new Date());
-  const clearedToday = new Set(questClears.filter((c) => todayQuests.some((q) => q.id === c.id)).map((c) => c.id));
-  const allClearedToday = allClearDays.includes(dayKey(new Date()));
+  const todayQuests = questsFor(new Date());
+  const claimedToday = new Set(questClears.filter((c) => todayQuests.some((q) => q.id === c.id)).map((c) => c.id));
+  const doneToday = new Set(todayQuests.filter((q) => isQuestDone(q, logs, new Date())).map((q) => q.id));
+  const bonusClaimed = allClearDays.includes(dayKey(new Date()));
+  const bonusReady = doneToday.size === todayQuests.length && !bonusClaimed;
+  const claimableIds = todayQuests.filter((q) => doneToday.has(q.id) && !claimedToday.has(q.id)).map((q) => q.id);
+  const claimableExp =
+    todayQuests.filter((q) => claimableIds.includes(q.id)).reduce((sum, q) => sum + q.exp, 0) + (bonusReady ? allClearExp() : 0);
+  const claimableCount = claimableIds.length + (bonusReady ? 1 : 0);
+  // 受け取っていない報酬があればクエストタブに印を付ける
+  const hasUnclaimedQuest = todayQuests.some((q) => doneToday.has(q.id) && !claimedToday.has(q.id)) || bonusReady;
   // 戦績のカレンダーに出すクリアしたクエスト
   const calendarQuests = questClears.map((c) => ({ id: c.id, title: c.title, completed: true, completedDateKey: c.dateKey }));
 
@@ -620,7 +705,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
           {/* PC用ナビゲーションタブ */}
           <nav className="hidden md:flex shrink-0 game-glass rounded-full p-1 items-center gap-0.5 lg:gap-1 text-xs font-bold">
             <button onClick={() => setActiveTab('timer')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'timer' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>冒険</button>
-            <button onClick={() => setActiveTab('todo')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'todo' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>クエスト</button>
+            <button onClick={() => setActiveTab('todo')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'todo' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>
+              クエスト
+              {hasUnclaimedQuest && <span className="ml-1 inline-block w-2 h-2 rounded-full bg-red-500 align-middle" aria-label="受け取れる報酬あり" />}
+            </button>
             <button onClick={() => setActiveTab('stats')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'stats' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>戦績</button>
             <button onClick={() => setActiveTab('bgm')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'bgm' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>BGM</button>
             <button onClick={() => setActiveTab('friends')} className={`px-2 lg:px-3 py-1.5 rounded-full whitespace-nowrap transition ${activeTab === 'friends' ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f] hover:bg-[#fdd69f]/10'}`}>
@@ -801,69 +889,64 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                 {/* クエストタブ */}
                 {activeTab === 'todo' && (
                   <div className="space-y-4">
-                  <div className="bg-[#312117]/90 rounded-3xl p-6 shadow-xl border border-[#fdd69f]/20 space-y-4">
-                    <div className="flex items-center">
+                  <div className="relative bg-[#312117]/90 rounded-xl p-5 md:p-6 shadow-xl border border-[#fdd69f]/20 space-y-3">
+                    <div className="flex items-center justify-between gap-2 min-h-[32px]">
                       <h2 className="text-base font-bold text-white flex items-center gap-2 whitespace-nowrap shrink-0">
                         <CheckSquare size={18} className="text-[#fdd69f]" /> クエストボード
                       </h2>
+                      {claimableCount >= 2 && (
+                        <button
+                          onClick={(e) => claimRewards(claimableIds, true, e.currentTarget)}
+                          className="quest-claim-btn shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#fdd69f] hover:bg-[#ffe3b8] text-[#312117] text-[11px] font-black"
+                        >
+                          <Gift size={13} /> まとめて受け取る +{claimableExp}
+                        </button>
+                      )}
                     </div>
 
-                    <p className="text-[11px] text-white/70 leading-relaxed">
-                      毎日3つのクエストが出ます（全員同じ・毎日0時に入れ替わり）。学習を記録したときに自動でクリアになります。
-                    </p>
+                    {/* 受け取ったときの「+○○ EXP」 */}
+                    {rewardPop && (
+                      <div
+                        key={rewardPop.key}
+                        className="quest-reward-pop pointer-events-none absolute left-1/2 top-12 z-10 px-4 py-1.5 rounded-md bg-[#fdd69f] text-[#312117] text-sm font-black shadow-xl shadow-black/40 whitespace-nowrap"
+                      >
+                        +{rewardPop.exp} EXP
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       {todayQuests.map((q) => {
-                        const done = clearedToday.has(q.id);
+                        const done = doneToday.has(q.id);
+                        const claimed = claimedToday.has(q.id);
                         const target = questTarget(q);
                         const progress = Math.min(target, questProgress(q, logs, new Date()));
                         return (
-                          <div
+                          <QuestRow
                             key={q.id}
-                            className={`p-3.5 rounded-xl border space-y-2 ${
-                              done ? 'bg-emerald-950/30 border-emerald-500/40' : 'bg-[#4a3424]/25 border-[#fdd69f]/30'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <span
-                                  className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full border mb-1 ${TIER_STYLE[q.tier]}`}
-                                >
-                                  {TIER_LABEL[q.tier]}
-                                </span>
-                                <p className={`text-xs font-bold ${done ? 'text-white/60 line-through' : 'text-white'}`}>{q.title}</p>
-                              </div>
-                              <span
-                                className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                  done ? 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30' : 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20'
-                                }`}
-                              >
-                                {done ? 'クリア！' : `+${q.exp} EXP`}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-1.5 rounded-full bg-black/40 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${done ? 'bg-emerald-400' : 'bg-[#fdd69f]'}`}
-                                  style={{ width: `${(progress / target) * 100}%` }}
-                                />
-                              </div>
-                              <span className="text-[10px] font-bold text-white/70 w-16 text-right">
-                                {q.kind === 'countdown' ? (done ? '達成' : 'まだ') : `${progress} / ${target}${q.unit}`}
-                              </span>
-                            </div>
-                          </div>
+                            title={q.title}
+                            exp={q.exp}
+                            progress={progress}
+                            target={target}
+                            progressText={q.kind === 'countdown' ? (done ? '達成' : 'まだ') : `${progress} / ${target}`}
+                            done={done}
+                            claimed={claimed}
+                            onClaim={(el) => claimRewards([q.id], false, el)}
+                          />
                         );
                       })}
-                    </div>
 
-                    <div
-                      className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between ${
-                        allClearedToday ? 'bg-yellow-400/15 border-yellow-400/40 text-yellow-200' : 'bg-black/20 border-[#fdd69f]/15 text-white/70'
-                      }`}
-                    >
-                      <span>🏆 3つ全部クリアでボーナス</span>
-                      <span>{allClearedToday ? 'クリア！' : `+${ALL_CLEAR_EXP} EXP（${clearedToday.size} / 3）`}</span>
+                      {/* クリアボーナス */}
+                      <QuestRow
+                        title="クリアボーナス"
+                        exp={allClearExp()}
+                        progress={doneToday.size}
+                        target={todayQuests.length}
+                        progressText={`${doneToday.size} / ${todayQuests.length}`}
+                        done={bonusReady || bonusClaimed}
+                        claimed={bonusClaimed}
+                        bonus
+                        onClaim={(el) => claimRewards([], true, el)}
+                      />
                     </div>
                   </div>
 
@@ -1057,7 +1140,11 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
           <Sparkles size={16} /> <span>冒険</span>
         </button>
         <button onClick={() => setActiveTab('todo')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'todo' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
-          <CheckSquare size={16} /> <span>クエスト</span>
+          <span className="relative">
+            <CheckSquare size={16} />
+            {hasUnclaimedQuest && <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500" aria-label="受け取れる報酬あり" />}
+          </span>
+          <span>クエスト</span>
         </button>
         <button onClick={() => setActiveTab('stats')} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-2 text-[10px] max-[359px]:text-[9px] max-[359px]:tracking-tighter font-bold whitespace-nowrap ${activeTab === 'stats' ? 'text-[#fdd69f]' : 'text-[#fdd69f]/45'}`}>
           <BarChart2 size={16} /> <span>戦績</span>

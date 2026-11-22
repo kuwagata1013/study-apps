@@ -1,15 +1,11 @@
 // ゲーム版のデイリークエスト
-// - 毎日「かんたん・ふつう・むずかしい」を1つずつ、全員に同じものを出す（日付から決める）
+// - 管理画面で決めた候補（settings/quests）から、毎日決まった数を全員に同じように出す（日付から決める）
 // - 記録したときに、その日の記録から自動で判定する
-// - 難しさの水準は実験の間ずっと同じ（研究の条件をそろえるため）
 import { dayKey, logTime } from './gameStatsUtils';
-
-export type QuestTier = 'easy' | 'normal' | 'hard';
-type QuestKind = 'subject' | 'total' | 'subjects' | 'sessions' | 'focus' | 'countdown';
+import { getQuestConfig, QUEST_SUBJECTS, type QuestConfig, type QuestKind, type QuestTemplate } from '../../lib/questConfig';
 
 export interface DailyQuest {
-  id: string; // 例: 2026-11-22:normal
-  tier: QuestTier;
+  id: string; // 例: 2026-11-22:normal-total（日付:候補のID）
   kind: QuestKind;
   title: string;
   target: number; // 分・教科数・回数
@@ -31,33 +27,8 @@ export interface QuestLog {
   countdownMinutes?: number; // 減算タイマーを最後まで走りきったときの設定時間
 }
 
-export const TIER_LABEL: Record<QuestTier, string> = { easy: 'かんたん', normal: 'ふつう', hard: 'むずかしい' };
-export const TIER_EXP: Record<QuestTier, number> = { easy: 50, normal: 100, hard: 150 };
-export const ALL_CLEAR_EXP = 100;
-
-const SUBJECTS = ['国語', '数学', '英語', '理科', '社会'];
-
-type Template = { kind: QuestKind; target: number };
-const POOLS: Record<QuestTier, Template[]> = {
-  easy: [
-    { kind: 'subject', target: 10 },
-    { kind: 'total', target: 15 },
-    { kind: 'focus', target: 10 }
-  ],
-  normal: [
-    { kind: 'subject', target: 20 },
-    { kind: 'total', target: 30 },
-    { kind: 'subjects', target: 2 },
-    { kind: 'sessions', target: 2 },
-    { kind: 'countdown', target: 15 }
-  ],
-  hard: [
-    { kind: 'subject', target: 40 },
-    { kind: 'total', target: 60 },
-    { kind: 'subjects', target: 3 },
-    { kind: 'focus', target: 30 }
-  ]
-};
+// 全部達成したときのクリアボーナス
+export const allClearExp = () => getQuestConfig().allClearExp;
 
 // 日付の文字列から決まる数（全員同じになるように、乱数は使わない）
 const hash = (text: string) => {
@@ -75,41 +46,43 @@ const hash = (text: string) => {
   return h >>> 0;
 };
 
-const describe = (t: Template, subject: string): { title: string; unit: string } => {
-  switch (t.kind) {
+export const describeQuest = (kind: QuestKind, target: number, subject: string): { title: string; unit: string } => {
+  switch (kind) {
     case 'subject':
-      return { title: `${subject}を${t.target}分勉強する`, unit: '分' };
+      return { title: `${subject}を${target}分勉強する`, unit: '分' };
     case 'total':
-      return { title: `今日合計${t.target}分勉強する`, unit: '分' };
+      return { title: `今日合計${target}分勉強する`, unit: '分' };
     case 'subjects':
-      return { title: `${t.target}教科を勉強する`, unit: '教科' };
+      return { title: `${target}教科を勉強する`, unit: '教科' };
     case 'sessions':
-      return { title: `${t.target}回に分けて記録する`, unit: '回' };
+      return { title: `${target}回に分けて記録する`, unit: '回' };
     case 'focus':
-      return { title: `止めずに${t.target}分続ける`, unit: '分' };
+      return { title: `止めずに${target}分続ける`, unit: '分' };
     case 'countdown':
-      return { title: `減算タイマー${t.target}分以上を最後まで走りきる`, unit: '回' };
+      return { title: `減算タイマー${target}分以上を最後まで走りきる`, unit: '回' };
   }
 };
 
-export const questsFor = (date: Date): DailyQuest[] => {
+const toQuest = (t: QuestTemplate, key: string): DailyQuest => {
+  const subject =
+    t.kind === 'subject'
+      ? t.subject && t.subject !== 'random'
+        ? t.subject
+        : QUEST_SUBJECTS[hash(`${key}:${t.id}:subject`) % QUEST_SUBJECTS.length]
+      : '';
+  const { title, unit } = describeQuest(t.kind, t.target, subject);
+  return { id: `${key}:${t.id}`, kind: t.kind, title, target: t.target, unit, subject: subject || undefined, exp: t.exp };
+};
+
+// その日のクエスト。候補を日付で並べかえて、先頭から決まった数を選ぶ（EXP の少ない順に並べて出す）
+export const questsFor = (date: Date, config: QuestConfig = getQuestConfig()): DailyQuest[] => {
   const key = dayKey(date);
-  return (['easy', 'normal', 'hard'] as QuestTier[]).map((tier) => {
-    const pool = POOLS[tier];
-    const t = pool[hash(`${key}:${tier}`) % pool.length];
-    const subject = SUBJECTS[hash(`${key}:${tier}:subject`) % SUBJECTS.length];
-    const { title, unit } = describe(t, subject);
-    return {
-      id: `${key}:${tier}`,
-      tier,
-      kind: t.kind,
-      title,
-      target: t.target,
-      unit,
-      subject: t.kind === 'subject' ? subject : undefined,
-      exp: TIER_EXP[tier]
-    };
-  });
+  return [...config.pool]
+    .map((t) => ({ t, order: hash(`${key}:${t.id}`) }))
+    .sort((a, b) => a.order - b.order)
+    .slice(0, config.perDay)
+    .map(({ t }) => toQuest(t, key))
+    .sort((a, b) => a.exp - b.exp);
 };
 
 const minutesOf = (l: QuestLog) => (l.durationSeconds ?? l.durationMinutes * 60) / 60;
@@ -137,9 +110,9 @@ export const questProgress = (q: DailyQuest, logs: QuestLog[], date: Date): numb
 export const questTarget = (q: DailyQuest) => (q.kind === 'countdown' ? 1 : q.target);
 export const isQuestDone = (q: DailyQuest, logs: QuestLog[], date: Date) => questProgress(q, logs, date) >= questTarget(q);
 
-// ===== クリアの記録（EXP を二重に渡さないため） =====
+// ===== 受け取りの記録（EXP を二重に渡さないため） =====
 export interface QuestClear {
-  id: string; // クエストのID（日付:難しさ）
+  id: string; // クエストのID（日付:候補のID）
   title: string;
   dateKey: string;
   exp: number;

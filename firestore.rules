@@ -85,7 +85,7 @@ service cloud.firestore {
         && (!('screen' in d) || (d.screen is string && d.screen.size() <= 32))
         && d.type in [
           'app_launch', 'app_resume', 'bgm_select', 'bgm_play', 'bgm_stop', 'tap_summary',
-          'quest_add', 'quest_complete', 'quest_uncomplete', 'quest_delete',
+          'quest_add', 'quest_complete', 'quest_uncomplete', 'quest_delete', 'quest_claim',
           'timer_start', 'timer_pause', 'timer_reset', 'timer_finish',
           'crystal_gain', 'crystal_use', 'focus_bonus'
         ]
@@ -109,6 +109,22 @@ service cloud.firestore {
         && request.resource.data.current is int
         && request.resource.data.current >= 1
         && request.resource.data.current <= 1000
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // ゲーム版デイリークエストの設定（1日に出す数・クリアボーナス・候補）。誰でも読める。変更は管理者のみ
+    // 候補の中身はアプリ側で読むときに確かめて整える
+    match /settings/quests {
+      allow get: if true;
+      allow list, delete: if false;
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['perDay', 'allClearExp', 'pool', 'updatedAt'])
+        && request.resource.data.perDay is int
+        && request.resource.data.perDay >= 1 && request.resource.data.perDay <= 6
+        && request.resource.data.allClearExp is int
+        && request.resource.data.allClearExp >= 0 && request.resource.data.allClearExp <= 1000
+        && request.resource.data.pool is list
+        && request.resource.data.pool.size() >= 1 && request.resource.data.pool.size() <= 40
         && request.resource.data.updatedAt == request.time;
     }
 
