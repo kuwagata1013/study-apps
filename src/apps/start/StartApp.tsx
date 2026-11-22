@@ -10,6 +10,7 @@ import {
   PARTICIPANT_ID_MAX
 } from '../../lib/participant';
 import { claimPlayerName, MAX_NAME_LENGTH, normalizeName } from '../../lib/players';
+import { loginAsDemoAdmin, loginAsDemoStudent } from '../../offline/demoLogin';
 import { getIssuedId, loginWithParticipantId, participantIdFromEmail, type LoginError } from '../../lib/participantAuth';
 
 const LOGIN_ERROR_TEXT: Record<LoginError, string> = {
@@ -21,8 +22,12 @@ const LOGIN_ERROR_TEXT: Record<LoginError, string> = {
   unknown: 'ログインできませんでした。もう一度お試しください'
 };
 
+// オフライン版（確認・デモ用）。ワンタップでログインできるボタンと、管理者用の入り口をいつも出す
+const IS_OFFLINE = import.meta.env.MODE === 'offline';
+
 // 管理者用の入り口（URL の最後に ?admin を付けたときだけ、Google ログインと管理者ページのボタンを出す）
 const isAdminEntry = () => {
+  if (IS_OFFLINE) return true;
   try {
     return new URLSearchParams(window.location.search).has('admin');
   } catch {
@@ -73,6 +78,28 @@ export const StartApp: React.FC<StartAppProps> = ({
     setLoading(false);
     if (err) setLoginError(LOGIN_ERROR_TEXT[err]);
     else setLoginPassword('');
+  };
+  // オフライン版：ワンタップで生徒・管理者としてログイン
+  const handleDemoLogin = async (as: 'student' | 'admin') => {
+    if (!IS_OFFLINE || loading) return;
+    setLoading(true);
+    setLoginError('');
+    onClearLoginNotice?.();
+    try {
+      const demo = { loginAsDemoStudent, loginAsDemoAdmin };
+      if (as === 'student') {
+        const err = await demo.loginAsDemoStudent();
+        if (err) setLoginError(err);
+      } else {
+        await demo.loginAsDemoAdmin();
+        onOpenAdmin?.();
+      }
+    } catch (e) {
+      console.error('デモログインに失敗:', e);
+      setLoginError('ログインできませんでした');
+    } finally {
+      setLoading(false);
+    }
   };
   const handleLogout = async () => {
     if (!confirm('ログアウトしますか？')) return;
@@ -278,6 +305,30 @@ export const StartApp: React.FC<StartAppProps> = ({
             </div>
           ) : (
             <form onSubmit={handleIdLogin} className="space-y-3 text-left">
+              {IS_OFFLINE && (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 space-y-2">
+                  <p className="text-[11px] font-bold text-amber-700 text-center">オフライン版：IDやパスワードなしで試せます</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleDemoLogin('student')}
+                      disabled={loading}
+                      className="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      <User size={14} /> 生徒として試す
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDemoLogin('admin')}
+                      disabled={loading}
+                      className="py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      <Shield size={14} /> 管理者として試す
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-amber-700/80 text-center">生徒は参加者ID「DEMO01」・名前「デモ生徒」でログインします</p>
+                </div>
+              )}
               <p className="text-[11px] text-gray-500 text-center">配られた参加者IDとパスワードでログインしてください</p>
               <label className="block">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-1.5">
@@ -485,7 +536,7 @@ export const StartApp: React.FC<StartAppProps> = ({
           {modeError && <p className="text-[11px] text-red-500 font-bold text-center">{modeError}</p>}
         </div>
 
-        {/* 管理者用（URL に ?admin を付けたときだけ表示） */}
+        {/* 管理者用（URL に ?admin を付けたときと、オフライン版で表示） */}
         {adminEntry && (
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-purple-100 space-y-3">
             <p className="flex items-center justify-center gap-1.5 text-[10px] font-bold text-purple-500 uppercase tracking-widest">

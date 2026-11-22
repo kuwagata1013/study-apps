@@ -230,6 +230,11 @@ export const App: React.FC = () => {
   };
 
   const openAdminAuth = () => {
+    // オフライン版（確認・デモ用）は確認なしで管理画面を開く
+    if (import.meta.env.MODE === 'offline') {
+      setMode('admin');
+      return;
+    }
     setAdminAuthError('');
     setIsAdminAuthOpen(true);
   };

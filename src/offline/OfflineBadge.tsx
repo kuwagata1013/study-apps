@@ -21,7 +21,7 @@ export default function OfflineBadge() {
         <div className="mb-2 w-60 rounded-xl bg-white text-gray-800 shadow-xl border border-gray-200 p-3 space-y-2 font-normal">
           <p className="font-bold">オフライン版（確認・デモ用）</p>
           <p className="leading-relaxed text-gray-600">
-            通信は一切行いません。ログインはデモユーザー、データはこの端末のブラウザ内だけに保存されます。管理画面も使えます。
+            通信は一切行いません。スタート画面の「生徒として試す」「管理者として試す」でログインなしで確認でき、データはこの端末のブラウザ内だけに保存されます。
           </p>
           <button onClick={reset} className="w-full rounded-lg bg-red-600 text-white py-2 font-bold hover:bg-red-500">
             デモデータをリセット
