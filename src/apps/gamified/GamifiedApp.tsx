@@ -16,6 +16,7 @@ import {
   Volume2, 
   VolumeX, 
   Sparkles,
+  Timer,
   Gem,
   RefreshCw,
   LogOut
@@ -128,6 +129,9 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const [isActive, setIsActive] = useState(false);
   const [subject, setSubject] = useState('英語');
   const [memo, setMemo] = useState('');
+  // 加算（経過時間）と減算（目標時間のカウントダウン）。seconds はどちらでも経過した秒数
+  const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>('countup');
+  const [targetMinutes, setTargetMinutes] = useState(25);
   // 集中ボーナス用：今回止めずに続けている秒数と、この計測での最長
   const [runSeconds, setRunSeconds] = useState(0);
   const [bestRun, setBestRun] = useState(0);
@@ -257,6 +261,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     }
   }, []);
 
+  // 最新の経過秒数（タイマーの処理の中で使う）
+  const secondsRef = useRef(seconds);
+  useEffect(() => {
+    secondsRef.current = seconds;
+  }, [seconds]);
+
   // タイマー作動中（isActive === true）の秒数カウント
   useEffect(() => {
     if (!isActive) return;
@@ -266,12 +276,35 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       const delta = Math.floor((Date.now() - lastTick) / 1000);
       if (delta <= 0) return;
       lastTick += delta * 1000;
-      setSeconds((sec) => sec + delta);
-      setRunSeconds((sec) => sec + delta);
+      // 減算のときは目標時間で止める
+      const limit = timerMode === 'countdown' ? targetMinutes * 60 : Infinity;
+      const step = Math.min(delta, Math.max(0, limit - secondsRef.current));
+      const next = secondsRef.current + step;
+      secondsRef.current = next;
+      setSeconds(next);
+      setRunSeconds((sec) => sec + step);
+      if (next >= limit) {
+        clearInterval(interval);
+        trackEvent('timer_finish', { label: subject, count: targetMinutes });
+        setIsActive(false);
+        alert('設定時間が経過しました！');
+      }
     }, 250);
 
     return () => clearInterval(interval);
-  }, [isActive]);
+  }, [isActive, timerMode]);
+
+  const handleSwitchTimerMode = (next: 'countup' | 'countdown') => {
+    if (isActive) {
+      alert('計測中はモードを変更できません。一度一時停止してください。');
+      return;
+    }
+    if (seconds > 0 && next === 'countdown' && seconds >= targetMinutes * 60) {
+      alert('目標時間をこえているので減算にできません。記録するかリセットしてください。');
+      return;
+    }
+    setTimerMode(next);
+  };
 
   // 計測セッションの開始時刻（最初に開始を押した時刻。保存・リセットで解除）
   const sessionStartRef = useRef<number | null>(null);
@@ -434,6 +467,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       durationSeconds: seconds,
       startedAtMs: sessionStartRef.current,
       memo,
+      timerType: timerMode,
       level: levelAtSave,
       expGained: totalExpGained
     });
@@ -628,9 +662,47 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
               <p className="text-[10px] font-bold text-white flex items-center justify-center gap-1">
                 <Sparkles size={11} className="text-[#fdd69f]" /> {stageStatus}
               </p>
+              {/* 加算 / 減算（シンプル版と同じ） */}
+              <div className="flex justify-center mt-2">
+                <div className="bg-[#312117]/70 p-0.5 rounded-xl flex gap-0.5 border border-[#fdd69f]/25">
+                  {([['countup', '加算', <Clock size={12} key="i" />], ['countdown', '減算', <Timer size={12} key="i" />]] as const).map(([m, label, icon]) => (
+                    <button
+                      key={m}
+                      onClick={() => handleSwitchTimerMode(m)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
+                        timerMode === m ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f]/70 hover:text-[#fdd69f]'
+                      }`}
+                    >
+                      {icon} {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {timerMode === 'countdown' && !isActive && seconds === 0 && (
+                <div className="flex justify-center gap-1 mt-1.5">
+                  {[10, 15, 25, 30, 60].map((mins) => (
+                    <button
+                      key={mins}
+                      onClick={() => setTargetMinutes(mins)}
+                      className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border transition ${
+                        targetMinutes === mins
+                          ? 'bg-[#fdd69f]/20 text-[#fdd69f] border-[#fdd69f]/70'
+                          : 'text-white/70 border-[#fdd69f]/20 hover:bg-[#fdd69f]/10'
+                      }`}
+                    >
+                      {mins}分
+                    </button>
+                  ))}
+                </div>
+              )}
               <p className="game-digits font-mono font-black tracking-tight text-5xl md:text-6xl text-white mt-1">
-                {formatTime(seconds)}
+                {formatTime(timerMode === 'countdown' ? Math.max(0, targetMinutes * 60 - seconds) : seconds)}
               </p>
+              {timerMode === 'countdown' && (
+                <p className="text-[10px] font-bold text-white/70">
+                  {seconds > 0 ? `経過 ${formatTime(seconds)}` : `目標: ${targetMinutes}分 カウントダウン`}
+                </p>
+              )}
               {bonusPercent > 0 && (
                 <p className="text-[10px] font-bold text-[#fdd69f] mt-1 flex items-center justify-center gap-1">
                   <Flame size={10} className="text-[#fdd69f]" />

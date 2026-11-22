@@ -192,8 +192,8 @@ export const StartApp: React.FC<StartAppProps> = ({
       else setModeError('参加者IDを確認できませんでした。通信状態を確認して、ログインし直してください');
       return;
     }
-    // 自分で入力した参加者IDは、管理者が発行したものだけ使える
-    if (showPidStep) {
+    // 自分で入力した参加者IDは、管理者が発行したものだけ使える（オフライン版は確認用なので、どのIDでも使える）
+    if (showPidStep && !IS_OFFLINE) {
       if (pidVerifying) return;
       setPidVerifying(true);
       try {
@@ -477,6 +477,7 @@ export const StartApp: React.FC<StartAppProps> = ({
               <p className="text-[11px] text-red-500 font-bold">{participantError}</p>
             ) : (
               <p className="text-[10px] text-gray-400">
+                {IS_OFFLINE && <span className="block font-bold text-amber-600">オフライン版では、好きなIDで試せます（例: ADMIN）</span>}
                 <span className="font-bold text-gray-500">このIDはアカウントに登録され、あとから変更できません。</span>
                 入力まちがいに気をつけてください。
               </p>

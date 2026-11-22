@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Clock, 
-  CheckSquare, 
   BarChart2, 
   Play, 
   Pause, 
   RotateCcw, 
-  Plus, 
-  Trash2, 
   Volume2, 
   VolumeX, 
   Calendar as CalendarIcon,
@@ -32,7 +29,6 @@ import Equalizer from '../../components/Equalizer';
 import { signOut } from 'firebase/auth';
 
 // 以前の版で最初から入っていた見本タスク（保存データからも取り除く）
-const SAMPLE_TASK_TITLES = ['英語 単語帳 p.20-40', '数学 ワーク2ページ'];
 
 interface SimpleAppProps {
   user?: any;
@@ -50,14 +46,6 @@ interface StudyLog {
   memo: string;
 }
 
-interface Task {
-  id: string;
-  title: string;
-  completed: boolean;
-  dueDate?: string;
-  completedAt?: string;
-  completedDateKey?: string;
-}
 
 // シンプル版の BGM（研究条件として、この3曲のまま）
 type SimpleBgm = 'rain' | 'waves' | 'cafe';
@@ -71,8 +59,8 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   user, 
   onResetMode 
 }) => {
-  // 1. タブ管理 (timer | todo | calendar | stats | profile)
-  const [activeTab, setActiveTab] = useState<'timer' | 'todo' | 'calendar' | 'stats' | 'profile'>('timer');
+  // 1. タブ管理 (timer | calendar | stats | bgm | profile)
+  const [activeTab, setActiveTab] = useState<'timer' | 'calendar' | 'stats' | 'bgm' | 'profile'>('timer');
 
   // 2. タイマー関連ステート
   const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>('countup');
@@ -81,14 +69,10 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const [elapsedSecondsCount, setElapsedSecondsCount] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [subject, setSubject] = useState('英語');
-  const [customSubject, setCustomSubject] = useState('');
   const [memo, setMemo] = useState('');
 
   // 3. データステート
   const [logs, setLogs] = useState<StudyLog[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskDueDate, setNewTaskDueDate] = useState('');
 
   // 4. BGM関連ステート
   const {
@@ -188,24 +172,10 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   // LocalStorage からデータ読み込み
   useEffect(() => {
     const logKey = 'simple_study_logs';
-    const taskKey = 'simple_tasks';
 
     const savedLogs = localStorage.getItem(logKey);
     if (savedLogs) {
       try { setLogs(JSON.parse(savedLogs)); } catch (e) {}
-    }
-    const savedTasks = localStorage.getItem(taskKey);
-    if (savedTasks) {
-      try {
-        // 以前の版で最初から入っていた見本タスクは取り除く
-        const loaded = (JSON.parse(savedTasks) as Task[]).filter(
-          (t) => !(['1', '2'].includes(t.id) && SAMPLE_TASK_TITLES.includes(t.title))
-        );
-        setTasks(loaded);
-        localStorage.setItem(taskKey, JSON.stringify(loaded));
-      } catch {
-        // 読めない場合は空のまま
-      }
     }
   }, []);
 
@@ -232,12 +202,14 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   // ログ保存
   const handleSaveLog = async () => {
     const recordSeconds = elapsedSecondsCount > 0 ? elapsedSecondsCount : (timerMode === 'countup' ? seconds : (targetMinutes * 60 - seconds));
-    if (recordSeconds < 3) {
-      alert('3秒以上の計測のみ保存されます');
+    // 1分未満は記録しない（ゲーム版と同じ条件）
+    if (recordSeconds < 60) {
+      alert('1分以上学習すると記録できます。もう少し続けてみましょう！');
       return;
     }
 
-    const finalSubject = subject === 'その他' ? (customSubject.trim() || 'その他') : subject;
+    // 教科は6つから選ぶだけ（「その他」も入力はしない。ゲーム版と同じ条件）
+    const finalSubject = subject;
     const now = new Date();
     const dateKey = now.toISOString().split('T')[0];
     
@@ -272,61 +244,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     setElapsedSecondsCount(0);
     setMemo('');
     alert(`学習ログを保存しました（${formatTimeDetail(recordSeconds)}）`);
-  };
-
-  // ToDo タスク追加
-  const handleAddTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-    
-    const newTask: Task = {
-      id: Date.now().toString(),
-      title: newTaskTitle.trim(),
-      completed: false,
-      dueDate: newTaskDueDate || undefined
-    };
-
-    trackEvent('quest_add', { label: newTask.title });
-    const taskKey = 'simple_tasks';
-    const updated = [newTask, ...tasks];
-    setTasks(updated);
-    localStorage.setItem(taskKey, JSON.stringify(updated));
-
-    setNewTaskTitle('');
-    setNewTaskDueDate('');
-  };
-
-  // ToDo 完了処理
-  const toggleTask = (id: string) => {
-    const taskKey = 'simple_tasks';
-    const now = new Date();
-    const dateKey = now.toISOString().split('T')[0];
-
-    const updated = tasks.map((t) => {
-      if (t.id === id) {
-        const nextState = !t.completed;
-        trackEvent(nextState ? 'quest_complete' : 'quest_uncomplete', { label: t.title });
-        return {
-          ...t,
-          completed: nextState,
-          completedAt: nextState ? now.toLocaleString('ja-JP') : undefined,
-          completedDateKey: nextState ? dateKey : undefined
-        };
-      }
-      return t;
-    });
-    setTasks(updated);
-    localStorage.setItem(taskKey, JSON.stringify(updated));
-  };
-
-  // ToDo 削除
-  const deleteTask = (id: string) => {
-    const taskKey = 'simple_tasks';
-    const target = tasks.find((t) => t.id === id);
-    if (target) trackEvent('quest_delete', { label: target.title });
-    const updated = tasks.filter((t) => t.id !== id);
-    setTasks(updated);
-    localStorage.setItem(taskKey, JSON.stringify(updated));
   };
 
   // フォーマット関数
@@ -371,8 +288,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     return acc + (isNaN(secs) ? 0 : secs);
   }, 0);
 
-  const tasksCompletedOnSelectedDate = tasks.filter(t => t.completed && t.completedDateKey === selectedCalendarDateStr);
-  const tasksDueOnSelectedDate = tasks.filter(t => t.dueDate === selectedCalendarDateStr);
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 pb-24 antialiased">
@@ -428,7 +343,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
               {/* 科目選択 */}
               <div className="space-y-2 pt-2">
                 <div className="flex justify-center flex-wrap gap-1.5">
-                  {['英語', '数学', '国語', '理科', '社会', 'その他'].map((sub) => (
+                  {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
                     <button
                       key={sub}
                       onClick={() => setSubject(sub)}
@@ -443,15 +358,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                   ))}
                 </div>
 
-                {subject === 'その他' && (
-                  <input
-                    type="text"
-                    value={customSubject}
-                    onChange={(e) => setCustomSubject(e.target.value)}
-                    placeholder="教科・勉強内容を入力"
-                    className="w-full max-w-xs px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-center focus:outline-none focus:ring-2 focus:ring-gray-400"
-                  />
-                )}
               </div>
 
               {/* タイマー表示 */}
@@ -517,99 +423,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           </div>
         )}
 
-        {/* ===== TAB 2: ToDo ===== */}
-        {activeTab === 'todo' && (
-          <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 md:items-start">
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
-              <h2 className="text-base font-bold text-gray-900 flex items-center justify-between">
-                <span className="flex items-center gap-2"><CheckSquare size={18} /> 学習タスク & 期限管理</span>
-              </h2>
-
-              <form onSubmit={handleAddTask} className="space-y-2">
-                <input
-                  type="text"
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="やることを入力..."
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-gray-400"
-                />
-                <div className="flex gap-2">
-                  <div className="flex-1 flex items-center gap-1.5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-500">
-                    <CalendarIcon size={14} />
-                    <input
-                      type="date"
-                      value={newTaskDueDate}
-                      onChange={(e) => setNewTaskDueDate(e.target.value)}
-                      className="bg-transparent focus:outline-none w-full"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-gray-900 text-white font-bold rounded-xl text-xs hover:bg-gray-800 transition flex items-center gap-1 shrink-0"
-                  >
-                    <Plus size={16} /> 追加
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                タスク一覧・こなした履歴
-              </h3>
-
-              <div className="space-y-2">
-                {tasks.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-4">タスクはありません</p>
-                ) : (
-                  tasks.map((task) => (
-                    <div 
-                      key={task.id} 
-                      className="p-3 bg-gray-50 rounded-2xl border border-gray-100 space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2.5 cursor-pointer text-xs">
-                          <input
-                            type="checkbox"
-                            checked={task.completed}
-                            onChange={() => toggleTask(task.id)}
-                            className="w-4 h-4 rounded text-gray-900 focus:ring-gray-400"
-                          />
-                          <span className={task.completed ? 'line-through text-gray-400 font-normal' : 'text-gray-900 font-bold'}>
-                            {task.title}
-                          </span>
-                        </label>
-                        <button
-                          onClick={() => deleteTask(task.id)}
-                          className="text-gray-400 hover:text-red-500 transition"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-
-                      <div className="flex justify-between items-center text-[10px] text-gray-400 pl-6 pt-1 border-t border-gray-100">
-                        {task.dueDate ? (
-                          <span className="flex items-center gap-1 font-semibold text-amber-600">
-                            <CalendarIcon size={10} /> 期限: {task.dueDate}
-                          </span>
-                        ) : (
-                          <span>期限なし</span>
-                        )}
-
-                        {task.completedAt && (
-                          <span className="flex items-center gap-1 text-green-600 font-bold">
-                            <CheckCircle2 size={10} /> 達成日時: {task.completedAt}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* ===== TAB 3: カレンダー ===== */}
         {activeTab === 'calendar' && (
           <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 md:items-start">
@@ -617,7 +430,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
               <div className="flex justify-between items-center px-1">
                 <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
                   <CalendarIcon size={16} className="text-blue-600" />
-                  {year}年 {month + 1}月 学習・タスクカレンダー
+                  {year}年 {month + 1}月 学習カレンダー
                 </h3>
                 <div className="flex items-center gap-1">
                   <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded-lg text-gray-600"><ChevronLeft size={16} /></button>
@@ -642,8 +455,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                   const isSelected = dateStr === selectedCalendarDateStr;
 
                   const hasLog = logs.some(l => (l.dateKey || l.createdAt.split(' ')[0].replace(/\//g, '-')) === dateStr);
-                  const hasCompletedTask = tasks.some(t => t.completed && t.completedDateKey === dateStr);
-                  const hasDueTask = tasks.some(t => t.dueDate === dateStr);
 
                   return (
                     <button
@@ -658,8 +469,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                       <span>{dayNum}</span>
                       <div className="flex gap-0.5 mt-0.5">
                         {hasLog && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-green-500'}`} />}
-                        {hasCompletedTask && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-yellow-300' : 'bg-blue-500'}`} />}
-                        {hasDueTask && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-pink-300' : 'bg-amber-500'}`} />}
                       </div>
                     </button>
                   );
@@ -693,27 +502,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                 )}
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-gray-100">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">こなしたタスク & 期限付きタスク</p>
-                {tasksCompletedOnSelectedDate.length === 0 && tasksDueOnSelectedDate.length === 0 ? (
-                  <p className="text-xs text-gray-400 italic py-1">この日にこなしたタスクはありません</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {tasksCompletedOnSelectedDate.map(t => (
-                      <div key={t.id} className="p-2 bg-green-50/60 rounded-xl border border-green-100 flex items-center justify-between text-xs text-green-900 font-semibold">
-                        <span className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-green-600" /> {t.title}</span>
-                        <span className="text-[10px] text-green-700">達成</span>
-                      </div>
-                    ))}
-                    {tasksDueOnSelectedDate.map(t => (
-                      <div key={t.id} className="p-2 bg-amber-50/60 rounded-xl border border-amber-100 flex items-center justify-between text-xs text-amber-900 font-semibold">
-                        <span className="flex items-center gap-1.5"><CalendarIcon size={14} className="text-amber-600" /> {t.title}</span>
-                        <span className="text-[10px] text-amber-700">本日期限</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         )}
@@ -788,10 +576,9 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           </div>
         )}
 
-        {/* ===== TAB 5: マイページ ===== */}
-        {activeTab === 'profile' && (
-          <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 md:items-start">
-            
+        {/* ===== TAB 4.5: BGM ===== */}
+        {activeTab === 'bgm' && (
+          <div className="md:max-w-2xl md:mx-auto">
             {/* BGM環境音設定 */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4" style={{ ['--eq-color' as string]: '#111827' }}>
               <div className="flex items-center justify-between gap-2 border-b pb-3">
@@ -877,7 +664,12 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                 {isPlayingBgm ? 'BGMを停止' : `${SIMPLE_BGM.find((t) => t.id === bgmType)?.name ?? ''}を再生`}
               </button>
             </div>
+          </div>
+        )}
 
+        {/* ===== TAB 5: マイページ ===== */}
+        {activeTab === 'profile' && (
+          <div className="space-y-4 md:max-w-2xl md:mx-auto">
             {/* システム連携・モード切替・管理者認証ボタン */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-3">
               <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
@@ -921,14 +713,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('todo')}
-            className={`flex-1 min-w-0 flex flex-col items-center gap-1 transition whitespace-nowrap ${activeTab === 'todo' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
-          >
-            <CheckSquare size={20} />
-            <span className="text-[10px]">ToDo</span>
-          </button>
-
-          <button
             onClick={() => setActiveTab('calendar')}
             className={`flex-1 min-w-0 flex flex-col items-center gap-1 transition whitespace-nowrap ${activeTab === 'calendar' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
           >
@@ -942,6 +726,14 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           >
             <BarChart2 size={20} />
             <span className="text-[10px]">詳細統計</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('bgm')}
+            className={`flex-1 min-w-0 flex flex-col items-center gap-1 transition whitespace-nowrap ${activeTab === 'bgm' ? 'text-gray-900 font-bold' : 'text-gray-400'}`}
+          >
+            <Music size={20} />
+            <span className="text-[10px]">BGM</span>
           </button>
 
           <button
