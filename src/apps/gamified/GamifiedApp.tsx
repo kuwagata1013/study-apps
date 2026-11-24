@@ -59,6 +59,9 @@ import sitUrl from '../../assets/character/sit.png';
 import { BGM_TRACKS, bgmName, type BgmTrack } from './bgmTracks';
 import Equalizer from '../../components/Equalizer';
 import TimerFinishDialog from '../../components/TimerFinishDialog';
+import AlarmSettings from '../../components/AlarmSettings';
+import { startTicker } from '../../lib/ticker';
+import { fireAlarm, prepareAlarm, useKeepAwake } from '../../lib/timerAlarm';
 
 // 歩行アニメーション：1枚の画像（src/assets/character/walk_sheet.png、624 × 864 px、4列 × 3段）に
 // 並んだ12コマで1周（左右1歩ずつ）。表示するコマの部分だけを映す
@@ -354,7 +357,9 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     if (!isActive) return;
     // 実時間との差分で進めるため、タブが裏に回って処理が間引かれても時間がずれない
     let lastTick = Date.now();
-    const interval = setInterval(() => {
+    let done = false;
+    const stop = startTicker(() => {
+      if (done) return;
       const delta = Math.floor((Date.now() - lastTick) / 1000);
       if (delta <= 0) return;
       lastTick += delta * 1000;
@@ -366,15 +371,19 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       setSeconds(next);
       setRunSeconds((sec) => sec + step);
       if (next >= limit) {
-        clearInterval(interval);
+        done = true;
+        stop();
+        fireAlarm(subject, targetMinutes);
         trackEvent('timer_finish', { label: subject, count: targetMinutes });
         setIsActive(false);
         setTimerFinished(true);
       }
-    }, 250);
+    });
 
-    return () => clearInterval(interval);
+    return stop;
   }, [isActive, timerMode]);
+
+  useKeepAwake(isActive && timerMode === 'countdown');
 
   const handleSwitchTimerMode = (next: 'countup' | 'countdown') => {
     if (isActive) {
@@ -834,6 +843,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   {seconds > 0 ? `経過 ${formatTime(seconds)}` : `目標: ${targetMinutes}分 カウントダウン`}
                 </p>
               )}
+              {timerMode === 'countdown' && <AlarmSettings theme="game" />}
               {bonusPercent > 0 && (
                 <p className="text-[10px] font-bold text-[#fdd69f] mt-1 flex items-center justify-center gap-1">
                   <Flame size={10} className="text-[#fdd69f]" />
@@ -889,6 +899,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
             <div className="w-full max-w-sm flex gap-3">
               <button
                 onClick={() => {
+                  if (!isActive) prepareAlarm(); // 終わったときに音を出せるようにしておく
                   trackEvent(isActive ? 'timer_pause' : 'timer_start', { label: subject, seconds });
                   if (isActive) {
                     // 止めたら連続の区切り。それまでの最長だけ覚えておく

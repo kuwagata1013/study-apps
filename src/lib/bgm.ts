@@ -21,6 +21,7 @@ export type BgmId = keyof typeof BGM_SOURCES;
 // 音量（0〜1）。端末に覚えておく
 const VOLUME_KEY = 'bgm_volume';
 const DEFAULT_VOLUME = 0.6;
+let ducked = false; // タイマーの音が鳴っている間は BGM を小さくする
 let audio: HTMLAudioElement | null = null;
 
 export const getBgmVolume = (): number => {
@@ -34,7 +35,7 @@ export const getBgmVolume = (): number => {
 
 export const setBgmVolume = (v: number) => {
   const vol = Math.min(1, Math.max(0, v));
-  if (audio) audio.volume = vol;
+  if (audio) audio.volume = ducked ? vol * 0.2 : vol;
   try {
     localStorage.setItem(VOLUME_KEY, String(vol));
   } catch {
@@ -42,12 +43,17 @@ export const setBgmVolume = (v: number) => {
   }
 };
 
+export const duckBgm = (on: boolean) => {
+  ducked = on;
+  if (audio) audio.volume = getBgmVolume() * (on ? 0.2 : 1);
+};
+
 const getAudio = () => {
   if (!audio) {
     audio = new Audio();
     audio.loop = true;
     audio.preload = 'auto';
-    audio.volume = getBgmVolume();
+    audio.volume = getBgmVolume() * (ducked ? 0.2 : 1);
   }
   return audio;
 };

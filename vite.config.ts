@@ -30,6 +30,7 @@ const singleFile = (): Plugin => ({
 
     const favicon = readFileSync(fileURLToPath(new URL('./public/favicon.svg', import.meta.url)))
     html = html.replace(/href="\.?\/favicon\.svg"/, () => `href="data:image/svg+xml;base64,${favicon.toString('base64')}"`)
+    html = html.replace(/\s*<link rel="manifest"[^>]*>/, '')
     htmlFile.source = html
   }
 })

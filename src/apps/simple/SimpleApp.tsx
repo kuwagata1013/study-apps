@@ -27,6 +27,9 @@ import { useScreenTracking } from '../../lib/useResearchTracking';
 import { useBgm } from '../../lib/useBgm';
 import Equalizer from '../../components/Equalizer';
 import TimerFinishDialog from '../../components/TimerFinishDialog';
+import AlarmSettings from '../../components/AlarmSettings';
+import { startTicker } from '../../lib/ticker';
+import { fireAlarm, prepareAlarm, useKeepAwake } from '../../lib/timerAlarm';
 import { signOut } from 'firebase/auth';
 import { showAlert } from '../../lib/dialog';
 
@@ -146,7 +149,9 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   useEffect(() => {
     if (!isActive) return;
     let lastTick = Date.now();
-    const interval = setInterval(() => {
+    let done = false;
+    const stop = startTicker(() => {
+      if (done) return;
       const delta = Math.floor((Date.now() - lastTick) / 1000);
       if (delta <= 0) return;
       lastTick += delta * 1000;
@@ -162,15 +167,19 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
         setSeconds(next);
         setElapsedSecondsCount((sec) => sec + step);
         if (next <= 0) {
-          clearInterval(interval);
+          done = true;
+          stop();
+          fireAlarm(subject, targetMinutes);
           trackEvent('timer_finish', { label: subject, count: targetMinutes });
           setIsActive(false);
           setTimerFinished(true);
         }
       }
-    }, 250);
-    return () => clearInterval(interval);
+    });
+    return stop;
   }, [isActive, timerMode]);
+
+  useKeepAwake(isActive && timerMode === 'countdown');
 
   // LocalStorage からデータ読み込み
   useEffect(() => {
@@ -343,6 +352,8 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                 </div>
               )}
 
+              {timerMode === 'countdown' && <AlarmSettings theme="light" />}
+
               {/* 科目選択 */}
               <div className="space-y-2 pt-2">
                 <div className="flex justify-center flex-wrap gap-1.5">
@@ -379,6 +390,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
               <div className="flex gap-3">
                 <button
                   onClick={() => {
+                    if (!isActive) prepareAlarm(); // 終わったときに音を出せるようにしておく
                     trackEvent(isActive ? 'timer_pause' : 'timer_start', { label: subject, seconds: elapsedSecondsCount });
                     setIsActive(!isActive);
                   }}

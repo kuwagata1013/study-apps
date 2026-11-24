@@ -1,0 +1,8 @@
+{
+  "name": "study-apps",
+  "short_name": "study-apps",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
