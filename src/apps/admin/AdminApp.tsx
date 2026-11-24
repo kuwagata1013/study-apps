@@ -10,7 +10,8 @@ import {
   Play, 
   Pause,
   Users,
-  ListChecks
+  ListChecks,
+  Download
 } from 'lucide-react';
 import ResearchDataPanel from './ResearchDataPanel';
 import ParticipantAccountsPanel from './ParticipantAccountsPanel';
@@ -331,6 +332,24 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
         {/* ===== TAB 4: デイリークエストの設定 ===== */}
         {activeTab === 'quests' && <QuestSettingsPanel />}
 
+        {/* オフライン版のダウンロード（npm run build で一緒に作られる。オフライン版自身と開発中は出さない） */}
+        {import.meta.env.PROD && import.meta.env.MODE !== 'offline' && (
+          <div className="bg-black rounded-3xl p-5 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <h2 className="text-sm font-bold text-white">オフライン版</h2>
+              <p className="text-[11px] text-neutral-400 leading-relaxed">
+                ログインも通信もせずに試せる確認用のファイルです（約4MB）。ダウンロードしてダブルクリックで開きます。本物の記録やアカウントは入っていません。
+              </p>
+            </div>
+            <a
+              href="/study-app-offline.html"
+              download="study-app-offline.html"
+              className="shrink-0 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+            >
+              <Download size={14} /> ダウンロード
+            </a>
+          </div>
+        )}
       </main>
 
     </div>
