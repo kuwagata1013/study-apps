@@ -12,6 +12,7 @@ import {
 import { claimPlayerName, MAX_NAME_LENGTH, normalizeName } from '../../lib/players';
 import { loginAsDemoAdmin, loginAsDemoStudent } from '../../offline/demoLogin';
 import { getIssuedId, loginWithParticipantId, participantIdFromEmail, type LoginError } from '../../lib/participantAuth';
+import { showAlert, showConfirm } from '../../lib/dialog';
 
 const LOGIN_ERROR_TEXT: Record<LoginError, string> = {
   wrong: '参加者IDかパスワードがちがいます',
@@ -102,7 +103,7 @@ export const StartApp: React.FC<StartAppProps> = ({
     }
   };
   const handleLogout = async () => {
-    if (!confirm('ログアウトしますか？')) return;
+    if (!(await showConfirm('ログアウトしますか？', { okLabel: 'ログアウト' }))) return;
     try {
       await signOut(auth);
     } catch (err) {
@@ -223,9 +224,9 @@ export const StartApp: React.FC<StartAppProps> = ({
     } catch (e: any) {
       console.error('ログインエラー:', e);
       if (e.code === 'auth/unauthorized-domain') {
-        alert('Firebase Console の Authentication > 設定 > 承認済みドメイン に現在のドメインを追加してください。');
+        showAlert('Firebase Console の Authentication > 設定 > 承認済みドメイン に現在のドメインを追加してください。');
       } else {
-        alert('ログインに失敗しました（ゲストモードのまま利用できます）');
+        showAlert('ログインに失敗しました（ゲストモードのまま利用できます）');
       }
     } finally {
       setLoading(false);

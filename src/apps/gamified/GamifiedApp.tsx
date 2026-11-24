@@ -54,6 +54,7 @@ import walkSheetUrl from '../../assets/character/walk_sheet.png';
 import sitUrl from '../../assets/character/sit.png';
 import { BGM_TRACKS, bgmName, type BgmTrack } from './bgmTracks';
 import Equalizer from '../../components/Equalizer';
+import TimerFinishDialog from '../../components/TimerFinishDialog';
 
 // 歩行アニメーション：1枚の画像（src/assets/character/walk_sheet.png、624 × 864 px、4列 × 3段）に
 // 並んだ12コマで1周（左右1歩ずつ）。表示するコマの部分だけを映す
@@ -83,6 +84,7 @@ import {
   type QuestLog
 } from './dailyQuests';
 import { getParticipantId } from '../../lib/participant';
+import { showAlert, showConfirm } from '../../lib/dialog';
 
 interface GamifiedAppProps {
   user?: any;
@@ -197,6 +199,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 加算（経過時間）と減算（目標時間のカウントダウン）。seconds はどちらでも経過した秒数
   const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>('countup');
   const [targetMinutes, setTargetMinutes] = useState(25);
+  const [timerFinished, setTimerFinished] = useState(false); // 減算が終わったときのポップアップ
   // 集中ボーナス用：今回止めずに続けている秒数と、この計測での最長
   const [runSeconds, setRunSeconds] = useState(0);
   const [bestRun, setBestRun] = useState(0);
@@ -299,7 +302,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     if (lastLoginDate !== todayStr) {
       localStorage.setItem('gamified_last_login_date', todayStr);
       addExp(50);
-      alert(`🌟 デイリーログインボーナス！ 本日最初のログインで +50 EXP を獲得しました！`);
+      showAlert({ icon: 'gift', title: 'デイリーログインボーナス！', message: '本日最初のログインで\n+50 EXP を獲得しました！' });
     }
 
 
@@ -317,13 +320,17 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
           localStorage.setItem('gamified_life_tokens', String(crystals));
           localStorage.setItem('gamified_protected_days', JSON.stringify(nextProtected));
           trackEvent('crystal_use', { count: missed.length });
-          alert(
-            `💎 ライフクリスタルを ${missed.length} 個使って、連続記録 ${studyStreak(loadedLogs, nextProtected)} 日を守りました！（残り ${crystals} 個）\n今日も学習して記録をのばしましょう。`
-          );
+          showAlert({
+            icon: 'gem',
+            title: '連続記録を守りました！',
+            message: `ライフクリスタルを ${missed.length} 個使って、連続記録 ${studyStreak(loadedLogs, nextProtected)} 日を守りました。（残り ${crystals} 個）\n今日も学習して記録をのばしましょう。`
+          });
         } else {
-          alert(
-            `😢 学習しなかった日が ${missed.length} 日あり、ライフクリスタル（${crystals} 個）が足りなかったため連続記録が途切れました。\n今日からまた積み上げましょう！`
-          );
+          showAlert({
+            icon: 'flame',
+            title: '連続記録が途切れました',
+            message: `学習しなかった日が ${missed.length} 日あり、ライフクリスタル（${crystals} 個）が足りませんでした。\n今日からまた積み上げましょう！`
+          });
         }
       }
     }
@@ -355,7 +362,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
         clearInterval(interval);
         trackEvent('timer_finish', { label: subject, count: targetMinutes });
         setIsActive(false);
-        alert('設定時間が経過しました！');
+        setTimerFinished(true);
       }
     }, 250);
 
@@ -364,11 +371,11 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
   const handleSwitchTimerMode = (next: 'countup' | 'countdown') => {
     if (isActive) {
-      alert('計測中はモードを変更できません。一度一時停止してください。');
+      showAlert('計測中はモードを変更できません。一度一時停止してください。');
       return;
     }
     if (seconds > 0 && next === 'countdown' && seconds >= targetMinutes * 60) {
-      alert('目標時間をこえているので減算にできません。記録するかリセットしてください。');
+      showAlert('目標時間をこえているので減算にできません。記録するかリセットしてください。');
       return;
     }
     setTimerMode(next);
@@ -414,15 +421,25 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       if (before.level < LEGEND_LEVEL && after.level >= LEGEND_LEVEL) {
         // Lv100（伝説の冒険者）到達は特別な演出
         const fire = (x: number) => confetti({ particleCount: 160, spread: 100, startVelocity: 55, origin: { x, y: 0.7 } });
-        fire(0.2);
-        fire(0.8);
-        setTimeout(() => fire(0.5), 400);
-        alert(`👑 Lv.${LEGEND_LEVEL} 到達！ 称号「${levelTitle(LEGEND_LEVEL)}」を手に入れました！\nここまで続けたあなたは本物の伝説です。この先にもさらに上の称号が待っています。`);
+        showAlert({
+          icon: 'trophy',
+          title: `Lv.${LEGEND_LEVEL} 到達！`,
+          message: `称号「${levelTitle(LEGEND_LEVEL)}」を手に入れました！\nここまで続けたあなたは本物の伝説です。この先にもさらに上の称号が待っています。`,
+          onShow: () => {
+            fire(0.2);
+            fire(0.8);
+            setTimeout(() => fire(0.5), 400);
+          }
+        });
       } else {
-        confetti({ particleCount: newTitle ? 200 : 120, spread: newTitle ? 100 : 80, origin: { y: 0.6 } });
-        alert(
-          `🎉 レベルアップ！ Lv.${after.level} になりました！` + (newTitle ? `\n🏆 新しい称号「${newTitle}」を手に入れました！` : '')
-        );
+        showAlert({
+          icon: newTitle ? 'trophy' : 'level',
+          title: 'レベルアップ！',
+          message: `Lv.${after.level} になりました！` + (newTitle ? `\n新しい称号「${newTitle}」を手に入れました！` : ''),
+          onShow: () => {
+            confetti({ particleCount: newTitle ? 200 : 120, spread: newTitle ? 100 : 80, origin: { y: 0.6 } });
+          }
+        });
       }
     }
   };
@@ -477,7 +494,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const handleSaveLog = async () => {
     // 1分未満は記録しない（短い記録をくり返して EXP を稼げないように）
     if (seconds < 60) {
-      alert('1分以上学習すると記録できます。もう少し続けてみましょう！');
+      showAlert('1分以上学習すると記録できます。もう少し続けてみましょう！');
       return;
     }
 
@@ -536,16 +553,21 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     }
     if (focused) trackEvent('focus_bonus', { label: subject, seconds: Math.max(bestRun, runSeconds) });
 
-    const lines = [`⏱️ 学習時間 +${baseTimeExp} EXP`];
-    if (streakExp > 0) lines.push(`🔥 連続ボーナス（+${Math.round(bonusRate * 100)}%） +${streakExp} EXP`);
+    const rows = [{ label: '学習時間', value: `+${baseTimeExp} EXP` }];
+    if (streakExp > 0) rows.push({ label: `連続ボーナス（+${Math.round(bonusRate * 100)}%）`, value: `+${streakExp} EXP` });
     if (focused) {
-      lines.push(`🎁 集中ボーナス！ 25分続けたごほうびの宝箱から +${focusExp} EXP${chestCrystal ? ' ＋ 💎 ライフクリスタル' : ''}`);
+      rows.push({ label: '集中ボーナス（25分続けた宝箱）', value: `+${focusExp} EXP` });
+      if (chestCrystal) rows.push({ label: '宝箱のライフクリスタル', value: '+1 個' });
     }
-    newlyDone.forEach((q) => lines.push(`🎯 クエスト「${q.title}」達成！`));
-    if (newlyDone.length > 0) lines.push('（報酬はクエストタブで受け取れます）');
-    if (streakReward) lines.push(`💎 連続 ${streakNow} 日達成！ ライフクリスタルを1個獲得`);
-    lines.push(`合計 +${totalExpGained} EXP 獲得！`);
-    alert(lines.join('\n'));
+    newlyDone.forEach((q) => rows.push({ label: `クエスト「${q.title}」`, value: '達成！' }));
+    if (streakReward) rows.push({ label: `連続 ${streakNow} 日達成のライフクリスタル`, value: '+1 個' });
+    showAlert({
+      icon: 'record',
+      title: '学習を記録しました！',
+      message: newlyDone.length > 0 ? 'クエストの報酬はクエストタブで受け取れます' : undefined,
+      rows,
+      total: { label: '合計', value: `+${totalExpGained} EXP` }
+    });
 
     const levelAtSave = level;
     addExp(totalExpGained);
@@ -1094,7 +1116,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                       <button
                         onClick={() => {
                           if (isActive) {
-                            alert('計測中はモードを変更できません。一度一時停止してください。');
+                            showAlert('計測中はモードを変更できません。一度一時停止してください。');
                             return;
                           }
                           onResetMode?.();
@@ -1109,15 +1131,15 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                         <button
                           onClick={async () => {
                             if (isActive) {
-                              alert('計測中はログアウトできません。一度一時停止してください。');
+                              showAlert('計測中はログアウトできません。一度一時停止してください。');
                               return;
                             }
-                            if (!confirm('ログアウトしますか？')) return;
+                            if (!(await showConfirm('ログアウトしますか？', { okLabel: 'ログアウト' }))) return;
                             try {
                               await signOut(auth);
                             } catch (error) {
                               console.error('ログアウトエラー:', error);
-                              alert('ログアウトできませんでした。通信状態を確認してください');
+                              showAlert('ログアウトできませんでした。通信状態を確認してください');
                             }
                           }}
                           className="w-full py-3 bg-red-900/30 hover:bg-red-900/50 text-red-200 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-red-400/30"
@@ -1163,6 +1185,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
           <User size={16} /> <span>プロフィール</span>
         </button>
       </nav>
+
+      {timerFinished && (
+        <TimerFinishDialog theme="game" subject={subject} minutes={targetMinutes} onClose={() => setTimerFinished(false)} />
+      )}
     </div>
   );
 };

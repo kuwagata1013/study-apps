@@ -8,6 +8,7 @@ import { fetchAdminUids } from '../../lib/admins';
 import { db } from '../../firebase';
 import { DATASET_NAME_MAX, datasetLabel, fetchDatasetInfo, renameDataset, setRecordingDataset } from '../../lib/dataset';
 import { downloadXlsx, type Sheet } from '../../lib/xlsx';
+import { showAlert, showConfirm } from '../../lib/dialog';
 
 // ===== 型と変換 =====
 
@@ -524,12 +525,12 @@ export const ResearchDataPanel: React.FC = () => {
 
   const handleStartNext = async () => {
     if (currentDataset === null) {
-      alert('現在のデータ番号を読み込めていません。「最新の状態に更新」を押してからもう一度お試しください。');
+      showAlert('現在のデータ番号を読み込めていません。「最新の状態に更新」を押してからもう一度お試しください。');
       return;
     }
     // 前のデータに戻しているときも、次は今までで一番大きい番号の次から
     const next = (datasetOptions[datasetOptions.length - 1] ?? currentDataset) + 1;
-    const ok = confirm(
+    const ok = (await showConfirm(
       `${labelOf(next)} の記録を開始しますか？
 
 ` +
@@ -538,17 +539,17 @@ export const ResearchDataPanel: React.FC = () => {
         `・${labelOf(currentDataset)} までの記録は消えず、この画面で切り替えて見られます
 ` +
         `・参加者が次にアプリを開くと、端末のレベル・EXP・クエスト・学習履歴が初期化されます（参加者IDは残ります。今の進み具合は端末にしまわれ、あとで「このデータの記録に戻す」と戻ります）`
-    );
+    ));
     if (!ok) return;
     setIsStartingNext(true);
     try {
       await setRecordingDataset(next);
       setCurrentDataset(next);
       setDatasetFilter(String(next));
-      alert(`${labelOf(next)} を開始しました。名前は「名前を変更」から付けられます。`);
+      showAlert(`${labelOf(next)} を開始しました。名前は「名前を変更」から付けられます。`);
     } catch (e) {
       console.error('データ切り替えエラー:', e);
-      alert('切り替えに失敗しました。管理者アカウントでログインしているか確認してください。');
+      showAlert('切り替えに失敗しました。管理者アカウントでログインしているか確認してください。');
     } finally {
       setIsStartingNext(false);
     }
@@ -561,7 +562,7 @@ export const ResearchDataPanel: React.FC = () => {
   const [isSwitching, setIsSwitching] = useState(false);
   const handleSwitchTo = async (n: number) => {
     if (currentDataset === null || n === currentDataset) return;
-    const ok = confirm(
+    const ok = (await showConfirm(
       `記録するデータを「${labelOf(currentDataset)}」から「${labelOf(n)}」に切り替えますか？
 
 ` +
@@ -572,16 +573,16 @@ export const ResearchDataPanel: React.FC = () => {
         `  （${labelOf(currentDataset)} の進み具合は端末にしまわれます。${labelOf(n)} の進み具合が残っていない端末は最初からになります）
 ` +
         `・あとでまた「${labelOf(currentDataset)}」に戻すこともできます`
-    );
+    ));
     if (!ok) return;
     setIsSwitching(true);
     try {
       await setRecordingDataset(n);
       setCurrentDataset(n);
-      alert(`記録するデータを「${labelOf(n)}」に切り替えました。`);
+      showAlert(`記録するデータを「${labelOf(n)}」に切り替えました。`);
     } catch (e) {
       console.error('データ切り替えエラー:', e);
-      alert('切り替えに失敗しました。管理者アカウントでログインしているか確認してください。');
+      showAlert('切り替えに失敗しました。管理者アカウントでログインしているか確認してください。');
     } finally {
       setIsSwitching(false);
     }
@@ -601,7 +602,7 @@ export const ResearchDataPanel: React.FC = () => {
       setNameDraft(null);
     } catch (e) {
       console.error('名前の変更エラー:', e);
-      alert('名前を変更できませんでした。管理者アカウントでログインしているか確認してください。');
+      showAlert('名前を変更できませんでした。管理者アカウントでログインしているか確認してください。');
     } finally {
       setIsSavingName(false);
     }
@@ -685,7 +686,7 @@ export const ResearchDataPanel: React.FC = () => {
 
   const exportCsv = (file: string, table: Sheet) => {
     if (table.rows.length === 0) {
-      alert('出力できるデータがありません');
+      showAlert('出力できるデータがありません');
       return;
     }
     downloadCsv(file, table.headers, table.rows);
@@ -699,7 +700,7 @@ export const ResearchDataPanel: React.FC = () => {
   // 4つの表をシートに分けて、1つの Excel ファイルにまとめる
   const exportXlsx = () => {
     if (filtered.length === 0 && filteredEvents.length === 0) {
-      alert('出力できるデータがありません');
+      showAlert('出力できるデータがありません');
       return;
     }
     const about: Sheet = {

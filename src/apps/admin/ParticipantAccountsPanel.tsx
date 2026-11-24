@@ -14,6 +14,7 @@ import {
   getIssuedId,
   resetParticipantPassword
 } from '../../lib/participantAuth';
+import { showAlert, showConfirm, showPrompt } from '../../lib/dialog';
 
 interface Row extends ParticipantAccount {
   name: string;
@@ -95,43 +96,43 @@ export const ParticipantAccountsPanel: React.FC = () => {
   }, [rows]);
 
   const onChange = async (r: Row) => {
-    const input = prompt(`${r.name || r.uid} の参加者IDを変更します。新しい参加者ID：`, r.participantId);
+    const input = await showPrompt(`${r.name || r.uid} の参加者IDを変更します。新しい参加者ID：`, r.participantId);
     if (input === null) return;
     const pid = normalizeParticipantId(input);
     if (!isValidParticipantId(pid)) {
-      alert('参加者IDは半角英数字・ハイフン・アンダースコアの32文字までです');
+      showAlert('参加者IDは半角英数字・ハイフン・アンダースコアの32文字までです');
       return;
     }
     if (pid === r.participantId) return;
     try {
       const issued = await getIssuedId(pid);
       if (!issued || issued.deleted) {
-        alert(`参加者ID「${pid}」は発行されていません。先に「参加者アカウントを発行」で発行してください`);
+        showAlert(`参加者ID「${pid}」は発行されていません。先に「参加者アカウントを発行」で発行してください`);
         return;
       }
       await adminSetParticipantId(r.uid, pid);
       setRows((list) => list.map((x) => (x.uid === r.uid ? { ...x, participantId: pid, updatedAt: new Date() } : x)));
     } catch (e) {
       console.error('参加者IDの変更に失敗:', e);
-      alert('変更できませんでした');
+      showAlert('変更できませんでした');
     }
   };
 
   const onReset = async (r: Row) => {
     if (busyUid) return;
     if (
-      !confirm(
+      !(await showConfirm(
         `参加者ID「${r.participantId}」（${r.name || '名前未設定'}）のパスワードを再発行します。\n\n` +
           '・今のパスワードは使えなくなり、ログイン中の端末は次に開いたときにログアウトされます\n' +
           '・プレイヤー名とフレンドは引き継がれます\n\nよろしいですか？'
-      )
+      ))
     )
       return;
     setBusyUid(r.uid);
     try {
       const result = await resetParticipantPassword(r.uid, r.participantId);
       if (result.status !== 'created') {
-        alert(`再発行できませんでした：${result.message ?? ''}`);
+        showAlert(`再発行できませんでした：${result.message ?? ''}`);
         return;
       }
       setResets((list) => [{ participantId: r.participantId, password: result.password, message: result.message }, ...list]);
@@ -145,12 +146,13 @@ export const ParticipantAccountsPanel: React.FC = () => {
   const onDelete = async (r: Row) => {
     if (busyUid) return;
     if (
-      !confirm(
+      !(await showConfirm(
         `参加者ID「${r.participantId}」（${r.name || '名前未設定'}）のアカウントを削除します。\n\n` +
           '・このIDではログインできなくなります\n' +
           '・プレイヤー名とフレンドは消えます（学習ログなどの研究データは残ります）\n' +
-          '・同じIDは「参加者アカウントを発行」でもう一度発行できます\n\n元に戻せません。よろしいですか？'
-      )
+          '・同じIDは「参加者アカウントを発行」でもう一度発行できます\n\n元に戻せません。よろしいですか？',
+        { okLabel: '削除する', danger: true }
+      ))
     )
       return;
     setBusyUid(r.uid);
@@ -159,7 +161,7 @@ export const ParticipantAccountsPanel: React.FC = () => {
       setRows((list) => list.filter((x) => x.uid !== r.uid));
     } catch (e) {
       console.error('アカウントの削除に失敗:', e);
-      alert('削除できませんでした（新しい Firestore のルールがデプロイされているか確認してください）');
+      showAlert('削除できませんでした（新しい Firestore のルールがデプロイされているか確認してください）');
     } finally {
       setBusyUid('');
     }

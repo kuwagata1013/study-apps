@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, Download, KeyRound } from 'lucide-react';
 import { issueParticipantAccount, parseParticipantIds, type IssueResult } from '../../lib/participantAuth';
 import { isValidParticipantId } from '../../lib/participant';
+import { showConfirm } from '../../lib/dialog';
 
 const downloadCsv = (filename: string, headers: string[], rows: unknown[][]) => {
   const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -42,8 +43,8 @@ export const IssueAccountsForm: React.FC<{ onIssued?: () => void }> = ({ onIssue
 
   const run = async () => {
     if (running || ids.length === 0 || invalid.length > 0) return;
-    if (created.length > 0 && !saved && !confirm('前回発行したパスワードを CSV に保存していません。表示が消えますが、続けますか？')) return;
-    if (!confirm(`${ids.length} 件のアカウントを発行します。よろしいですか？`)) return;
+    if (created.length > 0 && !saved && !(await showConfirm('前回発行したパスワードを CSV に保存していません。表示が消えますが、続けますか？'))) return;
+    if (!(await showConfirm(`${ids.length} 件のアカウントを発行します。よろしいですか？`))) return;
     setRunning(true);
     setSaved(false);
     setResults([]);

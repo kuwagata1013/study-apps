@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { getBgmVolume, playBgm, setBgmVolume, stopBgm, type BgmId } from './bgm';
 import { trackEvent } from './researchEvents';
 import { useBgmTracking } from './useResearchTracking';
+import { showAlert } from './dialog';
 
 export const useBgm = <T extends string>(initial: T, sources: Record<T, BgmId>) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -18,7 +19,7 @@ export const useBgm = <T extends string>(initial: T, sources: Record<T, BgmId>) 
     playBgm(sources[id]).then((ok) => {
       if (!ok) {
         setIsPlaying(false);
-        alert('BGMを再生できませんでした。端末の音量やマナーモードを確認して、もう一度お試しください。');
+        showAlert('BGMを再生できませんでした。端末の音量やマナーモードを確認して、もう一度お試しください。');
       }
     });
   };

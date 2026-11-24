@@ -19,6 +19,7 @@ import {
   type QuestTemplate
 } from '../../lib/questConfig';
 import { describeQuest, questsFor } from '../gamified/dailyQuests';
+import { showAlert, showConfirm } from '../../lib/dialog';
 
 const inputCls =
   'w-full px-2.5 py-2 text-xs border border-neutral-700 rounded-lg bg-black text-neutral-100 focus:outline-none focus:ring-2 focus:ring-sky-500';
@@ -93,17 +94,17 @@ export const QuestSettingsPanel: React.FC = () => {
 
   const handleSave = async () => {
     if (draft.pool.length === 0) {
-      alert('クエストの候補を1つ以上入れてください');
+      showAlert('クエストの候補を1つ以上入れてください');
       return;
     }
     if (perDayOver) {
-      alert(`1日に出す数（${draft.perDay}）が候補の数（${draft.pool.length}）より多いです`);
+      showAlert(`1日に出す数（${draft.perDay}）が候補の数（${draft.pool.length}）より多いです`);
       return;
     }
     if (
-      !confirm(
+      !(await showConfirm(
         'クエストの設定を保存しますか？\n\n・すぐに反映されます（次にアプリを開いた人から、新しい設定のクエストになります）\n・今日のクエストが入れ替わることがあります\n・研究の条件が変わるので、変えた日時を記録しておくことをおすすめします'
-      )
+      ))
     )
       return;
     setSaving(true);
@@ -111,10 +112,10 @@ export const QuestSettingsPanel: React.FC = () => {
       const clean = await saveQuestConfig(draft);
       setSaved(clean);
       setDraft(clean);
-      alert('保存しました');
+      showAlert('保存しました');
     } catch (e) {
       console.error('クエスト設定の保存に失敗:', e);
-      alert('保存できませんでした。管理者アカウントでログインしているか、Firestore のルールがデプロイされているか確認してください');
+      showAlert('保存できませんでした。管理者アカウントでログインしているか、Firestore のルールがデプロイされているか確認してください');
     } finally {
       setSaving(false);
     }
@@ -283,7 +284,7 @@ export const QuestSettingsPanel: React.FC = () => {
             変更を取り消す
           </button>
           <button
-            onClick={() => confirm('初期設定（1日3個・12個の候補・クリアボーナス100）を下書きに入れますか？（保存するまで反映されません）') && setDraft(DEFAULT_QUEST_CONFIG)}
+            onClick={async () => (await showConfirm('初期設定（1日3個・12個の候補・クリアボーナス100）を下書きに入れますか？（保存するまで反映されません）')) && setDraft(DEFAULT_QUEST_CONFIG)}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-neutral-700 text-neutral-400 text-xs font-bold hover:bg-neutral-800"
           >
             <RotateCcw size={13} /> 初期設定に戻す

@@ -26,7 +26,9 @@ import { trackEvent } from '../../lib/researchEvents';
 import { useScreenTracking } from '../../lib/useResearchTracking';
 import { useBgm } from '../../lib/useBgm';
 import Equalizer from '../../components/Equalizer';
+import TimerFinishDialog from '../../components/TimerFinishDialog';
 import { signOut } from 'firebase/auth';
+import { showAlert } from '../../lib/dialog';
 
 // 以前の版で最初から入っていた見本タスク（保存データからも取り除く）
 
@@ -65,6 +67,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   // 2. タイマー関連ステート
   const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>('countup');
   const [targetMinutes, setTargetMinutes] = useState(25);
+  const [timerFinished, setTimerFinished] = useState(false); // 減算が終わったときのポップアップ
   const [seconds, setSeconds] = useState(0);
   const [elapsedSecondsCount, setElapsedSecondsCount] = useState(0);
   const [isActive, setIsActive] = useState(false);
@@ -102,7 +105,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   // モード切替時（タイマー計測中でない場合のみ初期化）
   const handleSwitchTimerMode = (newMode: 'countup' | 'countdown') => {
     if (isActive) {
-      alert('計測中はモードを変更できません。一度一時停止してください。');
+      showAlert('計測中はモードを変更できません。一度一時停止してください。');
       return;
     }
 
@@ -162,7 +165,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           clearInterval(interval);
           trackEvent('timer_finish', { label: subject, count: targetMinutes });
           setIsActive(false);
-          alert('設定時間が経過しました！');
+          setTimerFinished(true);
         }
       }
     }, 250);
@@ -183,7 +186,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      alert('ログアウトしました');
+      showAlert('ログアウトしました');
     } catch (error) {
       console.error('ログアウトエラー:', error);
     }
@@ -204,7 +207,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     const recordSeconds = elapsedSecondsCount > 0 ? elapsedSecondsCount : (timerMode === 'countup' ? seconds : (targetMinutes * 60 - seconds));
     // 1分未満は記録しない（ゲーム版と同じ条件）
     if (recordSeconds < 60) {
-      alert('1分以上学習すると記録できます。もう少し続けてみましょう！');
+      showAlert('1分以上学習すると記録できます。もう少し続けてみましょう！');
       return;
     }
 
@@ -243,7 +246,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     setSeconds(timerMode === 'countdown' ? targetMinutes * 60 : 0);
     setElapsedSecondsCount(0);
     setMemo('');
-    alert(`学習ログを保存しました（${formatTimeDetail(recordSeconds)}）`);
+    showAlert(`学習ログを保存しました（${formatTimeDetail(recordSeconds)}）`);
   };
 
   // フォーマット関数
@@ -745,6 +748,10 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           </button>
         </div>
       </nav>
+
+      {timerFinished && (
+        <TimerFinishDialog theme="light" subject={subject} minutes={targetMinutes} onClose={() => setTimerFinished(false)} />
+      )}
 
     </div>
   );

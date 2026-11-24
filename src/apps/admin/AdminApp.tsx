@@ -20,6 +20,7 @@ import QuestSettingsPanel from './QuestSettingsPanel';
 import { auth } from '../../firebase';
 import { recordAdminProfile } from '../../lib/admins';
 import { BGM_SOURCES } from '../../lib/bgm';
+import { showAlert, showConfirm } from '../../lib/dialog';
 
 interface AdminAppProps {
   onExitAdmin: () => void;
@@ -79,7 +80,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.includes('audio')) {
-        alert('音声ファイル(mp3, wav等)を選択してください');
+        showAlert('音声ファイル(mp3, wav等)を選択してください');
         return;
       }
       const reader = new FileReader();
@@ -95,7 +96,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
   const handleAddBgm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBgmName.trim() || !newBgmUrl.trim()) {
-      alert('BGM名とURL（またはファイル）を指定してください');
+      showAlert('BGM名とURL（またはファイル）を指定してください');
       return;
     }
 
@@ -111,12 +112,12 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
 
     setNewBgmName('');
     setNewBgmUrl('');
-    alert('新しいBGMを追加しました！');
+    showAlert('新しいBGMを追加しました！');
   };
 
   // 【管理者機能】任意のBGM音源を消す（削除処理）
-  const handleDeleteBgm = (id: string, name: string) => {
-    if (!confirm(`BGM「${name}」を削除しますか？`)) return;
+  const handleDeleteBgm = async (id: string, name: string) => {
+    if (!(await showConfirm(`BGM「${name}」を削除しますか？`, { okLabel: '削除する', danger: true }))) return;
 
     // 再生中の音源を削除する場合は停止する
     if (previewAudio && previewAudio.id === id) {
@@ -137,7 +138,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
     } else {
       if (previewAudio) previewAudio.audio.pause();
       const audio = new Audio(track.url);
-      audio.play().catch(() => alert('音源の再生に失敗しました（URLが無効の可能性があります）'));
+      audio.play().catch(() => showAlert('音源の再生に失敗しました（URLが無効の可能性があります）'));
       setPreviewAudio({ id: track.id, audio });
     }
   };

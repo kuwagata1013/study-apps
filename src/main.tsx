@@ -2,9 +2,11 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import DialogHost from './components/DialogHost.tsx'
 import OfflineBadge from './offline/OfflineBadge.tsx'
 import { syncDataset } from './lib/dataset.ts'
 import { syncQuestConfig } from './lib/questConfig.ts'
+import { showAlert } from './lib/dialog.ts'
 
 // オフライン版（npm run build:offline）のときだけ「オフライン版」表示を出す
 const isOffline = import.meta.env.MODE === 'offline'
@@ -15,6 +17,7 @@ Promise.all([syncDataset(), syncQuestConfig()]).then(([change]) => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />
+      <DialogHost />
       {isOffline && <OfflineBadge />}
     </StrictMode>,
   )
@@ -25,6 +28,6 @@ Promise.all([syncDataset(), syncQuestConfig()]).then(([change]) => {
         : change.restored
           ? `記録期間がデータ${change.to}に切り替わりました。\nこの端末に残っていたデータ${change.to}のレベル・EXP・クエスト・学習履歴に戻しました。`
           : `記録期間がデータ${change.to}に切り替わりました。\nこの端末にはデータ${change.to}の進み具合が残っていなかったので、最初からになります。`
-    setTimeout(() => alert(message), 300)
+    showAlert(message)
   }
 })

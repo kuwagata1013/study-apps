@@ -1,11 +1,12 @@
 // オフライン版であることの表示と、デモデータのリセット
 import { useState } from 'react';
+import { showConfirm } from '../lib/dialog';
 
 export default function OfflineBadge() {
   const [open, setOpen] = useState(false);
 
-  const reset = () => {
-    if (!confirm('この端末に保存されたデモデータ（ログ・プロフィール・設定など）をすべて消して最初からにしますか？')) return;
+  const reset = async () => {
+    if (!(await showConfirm('この端末に保存されたデモデータ（ログ・プロフィール・設定など）をすべて消して最初からにしますか？', { okLabel: '最初からにする', danger: true }))) return;
     try {
       localStorage.clear();
       sessionStorage.clear();

@@ -27,6 +27,7 @@ import SimpleApp from './apps/simple/SimpleApp';
 import AdminApp from './apps/admin/AdminApp';
 import NameSetup from './apps/start/NameSetup';
 import { claimPlayerName, getCachedName, loadMyName } from './lib/players';
+import { setDialogTheme } from './lib/dialog';
 import { Shield } from 'lucide-react';
 
 type AppMode = 'start' | 'simple' | 'gamified' | 'admin';
@@ -201,9 +202,10 @@ export const App: React.FC = () => {
     };
   }, [authReady, uid]);
 
-  // 行動データに現在のモードを付ける
+  // 行動データに現在のモードを付ける。ポップアップの見た目もモードに合わせる
   useEffect(() => {
     setEventMode(mode);
+    setDialogTheme(mode === 'gamified' ? 'game' : mode === 'admin' ? 'admin' : 'light');
   }, [mode]);
 
   // モード選択処理

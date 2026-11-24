@@ -17,6 +17,7 @@ import {
   type SendRequestResult
 } from '../../lib/players';
 import { dayKey, formatMinutes } from './gameStatsUtils';
+import { showConfirm } from '../../lib/dialog';
 
 // 今日の勉強時間（相手の記録が今日のものでなければ 0 分）
 const todayMinutesOf = (f: PlayerProfile) => (f.todayKey === dayKey(new Date()) ? f.todayMinutes : 0);
@@ -260,7 +261,7 @@ export const FriendsPanel: React.FC<{ uid: string | null; onIncomingCount?: (n: 
   };
 
   const onRemove = async (f: PlayerProfile) => {
-    if (!uid || !confirm(`${f.name} さんをフレンドから外しますか？（相手のフレンド一覧からも外れます）`)) return;
+    if (!uid || !(await showConfirm(`${f.name} さんをフレンドから外しますか？（相手のフレンド一覧からも外れます）`, { okLabel: '外す', danger: true }))) return;
     try {
       await removeFriend(uid, f.uid);
       setFriends((list) => list.filter((x) => x.uid !== f.uid));
