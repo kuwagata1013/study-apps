@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { showConfirm } from '../lib/dialog';
 import { getSceneOverride, PHASE_LABEL, setSceneOverride, WEATHER_LABEL, type Scene } from '../apps/gamified/sceneTime';
+import { allSceneryUnlocked, setAllSceneryUnlocked } from '../apps/gamified/scenery';
 
 export default function OfflineBadge() {
   const [open, setOpen] = useState(false);
@@ -45,6 +46,10 @@ export default function OfflineBadge() {
               </select>
             </label>
           ))}
+          <label className="flex items-center justify-between gap-2">
+            <span>景色を全部開放（開き直すと反映）</span>
+            <input type="checkbox" defaultChecked={allSceneryUnlocked()} onChange={(e) => setAllSceneryUnlocked(e.target.checked)} />
+          </label>
           <button onClick={reset} className="w-full rounded-lg bg-red-600 text-white py-2 font-bold hover:bg-red-500">
             デモデータをリセット
           </button>

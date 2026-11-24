@@ -28,6 +28,8 @@ import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
 import WeatherOverlay from './WeatherOverlay';
 import { sceneColors, useScene } from './sceneTime';
+import SceneryPicker from './SceneryPicker';
+import { loadSceneryId, newlyUnlocked, saveSceneryId, sceneryFor, type SceneryId } from './scenery';
 import { AccountIdCopy, FriendsPanel, PlayerNameEditor } from './FriendsPanel';
 import { countIncomingRequests, savePlayerStats } from '../../lib/players';
 import './GameStage.css';
@@ -201,7 +203,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 加算（経過時間）と減算（目標時間のカウントダウン）。seconds はどちらでも経過した秒数
   const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>('countup');
   const [targetMinutes, setTargetMinutes] = useState(25);
-  const scene = useScene(); // 背景の時間帯と天気
+  const baseScene = useScene(); // 背景の時間帯と天気
+  const [sceneryId, setSceneryId] = useState<string>(loadSceneryId); // 選んでいる景色
   const [timerFinished, setTimerFinished] = useState(false); // 減算が終わったときのポップアップ
   // 集中ボーナス用：今回止めずに続けている秒数と、この計測での最長
   const [runSeconds, setRunSeconds] = useState(0);
@@ -420,6 +423,9 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     localStorage.setItem('gamified_exp', after.exp.toString());
 
     if (after.level > before.level) {
+      const sceneries = newlyUnlocked(before.level, after.level);
+      const sceneryText =
+        sceneries.length > 0 ? `\n新しい景色${sceneries.map((s) => `「${s.name}」`).join('')}が開放されました！\nプロフィールタブで選べます。` : '';
       const newTitle = levelTitle(after.level) !== levelTitle(before.level) ? levelTitle(after.level) : null;
       if (before.level < LEGEND_LEVEL && after.level >= LEGEND_LEVEL) {
         // Lv100（伝説の冒険者）到達は特別な演出
@@ -427,7 +433,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
         showAlert({
           icon: 'trophy',
           title: `Lv.${LEGEND_LEVEL} 到達！`,
-          message: `称号「${levelTitle(LEGEND_LEVEL)}」を手に入れました！\nここまで続けたあなたは本物の伝説です。この先にもさらに上の称号が待っています。`,
+          message: `称号「${levelTitle(LEGEND_LEVEL)}」を手に入れました！\nここまで続けたあなたは本物の伝説です。この先にもさらに上の称号が待っています。${sceneryText}`,
           onShow: () => {
             fire(0.2);
             fire(0.8);
@@ -438,7 +444,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
         showAlert({
           icon: newTitle ? 'trophy' : 'level',
           title: 'レベルアップ！',
-          message: `Lv.${after.level} になりました！` + (newTitle ? `\n新しい称号「${newTitle}」を手に入れました！` : ''),
+          message: `Lv.${after.level} になりました！` + (newTitle ? `\n新しい称号「${newTitle}」を手に入れました！` : '') + sceneryText,
           onShow: () => {
             confetti({ particleCount: newTitle ? 200 : 120, spread: newTitle ? 100 : 80, origin: { y: 0.6 } });
           }
@@ -663,12 +669,28 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     };
   }, [uid]);
   const bonusPercent = Math.round(streakBonusRate(streakUntilYesterday(logs, protectedDays)) * 100);
+  // 選んでいる景色（まだ開放されていなければ最初の森）。似合わない天気は置きかえる
+  const scenery = sceneryFor(sceneryId, level);
+  const scene = { ...baseScene, weather: scenery.weather?.[baseScene.weather] ?? baseScene.weather };
+  const pickScenery = (id: SceneryId) => {
+    if (id === scenery.id) return;
+    setSceneryId(id);
+    saveSceneryId(id);
+    trackEvent('scenery_change', { label: id });
+  };
   const focusAchieved = Math.max(bestRun, runSeconds) >= FOCUS_BONUS_SECONDS;
 
   return (
     <div
       data-phase={scene.phase}
-      style={{ '--ground-tint': sceneColors(scene).ground } as React.CSSProperties}
+      style={
+        {
+          '--ground-tint': sceneColors(scene).ground,
+          '--ground-base': scenery.ground[0],
+          '--ground-light': scenery.ground[1],
+          '--ground-dark': scenery.ground[2]
+        } as React.CSSProperties
+      }
       className="game-stage relative h-[100dvh] overflow-hidden bg-slate-950 text-slate-100 antialiased selection:bg-purple-600 selection:text-white"
     >
 
@@ -677,7 +699,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
         <div className="game-world">
           <div className="game-world-inner">
             {/* 動く森の背景（学習中は景色が流れる。時間帯と天気で変わる） */}
-            <ForestBackground moving={isActive} scene={scene} />
+            <ForestBackground moving={isActive} scene={scene} scenery={scenery} />
 
             {/* アバター描画：歩行の12コマ（walk_sheet.png）。足元を小道に合わせる。
                 --s は表示の倍率（スマホ 0.42、PC 0.5） */}
@@ -1119,6 +1141,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                         {uid ? <AccountIdCopy uid={uid} /> : <p className="text-white/45">ログインすると表示されます</p>}
                       </div>
                     </div>
+
+                    <SceneryPicker level={level} current={scenery.id} onPick={pickScenery} />
 
                     <div className="space-y-2 pt-2">
                       <button

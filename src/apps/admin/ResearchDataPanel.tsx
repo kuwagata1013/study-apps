@@ -143,6 +143,7 @@ const EVENT_LABELS: Record<string, string> = {
   quest_add: 'クエスト追加',
   quest_complete: 'クエスト達成',
   quest_claim: 'クエスト報酬の受け取り',
+  scenery_change: '景色の変更',
   quest_uncomplete: 'クエスト達成取消',
   quest_delete: 'クエスト削除',
   timer_start: 'タイマー開始',

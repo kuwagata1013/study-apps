@@ -85,7 +85,7 @@ service cloud.firestore {
         && (!('screen' in d) || (d.screen is string && d.screen.size() <= 32))
         && d.type in [
           'app_launch', 'app_resume', 'bgm_select', 'bgm_play', 'bgm_stop', 'tap_summary',
-          'quest_add', 'quest_complete', 'quest_uncomplete', 'quest_delete', 'quest_claim',
+          'quest_add', 'quest_complete', 'quest_uncomplete', 'quest_delete', 'quest_claim', 'scenery_change',
           'timer_start', 'timer_pause', 'timer_reset', 'timer_finish',
           'crystal_gain', 'crystal_use', 'focus_bonus'
         ]

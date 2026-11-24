@@ -128,14 +128,17 @@ const WEATHER_GROUND: Record<Weather, number> = { sunny: 0, cloudy: 0.1, rain: 0
 // 遠くの景色ほど霞む（遠景・中景に足す分）
 const WEATHER_FAR: Record<Weather, number> = { sunny: 0, cloudy: 0.12, rain: 0.35, snow: 0.35, fog: 0.75 };
 
-export const sceneColors = ({ phase, weather }: Scene) => {
+export const sceneColors = ({ phase, weather }: Scene, skyTint?: Tint) => {
   const haze = HAZE[phase];
   const groundHaze = weather === 'snow' ? mix(haze, '#ffffff', phase === 'night' ? 0.2 : 0.6) : mix(haze, '#000000', weather === 'rain' ? 0.3 : 0);
   const base = combine(PHASE_TINT[phase], { color: groundHaze, amount: WEATHER_GROUND[weather] });
   const far = WEATHER_FAR[weather];
   const [r, g, b] = toRgb(base.color);
   return {
-    sky: SKY[phase].map((c) => mix(c, haze, WEATHER_SKY[weather])),
+    // 景色ごとの空の色は、夜は控えめに混ぜる
+    sky: SKY[phase].map((c) =>
+      mix(skyTint ? mix(c, skyTint.color, skyTint.amount * (phase === 'night' ? 0.15 : phase === 'evening' ? 0.4 : 1)) : c, haze, WEATHER_SKY[weather])
+    ),
     far: combine(base, { color: haze, amount: far }),
     mid: combine(base, { color: haze, amount: far * 0.5 }),
     near: base,
