@@ -1,5 +1,5 @@
 // ゲーム版の景色（レベルで開放される）。遠景・中景・近景をドット絵で描く
-import { mix, type Weather } from './sceneTime';
+import { getSceneOverride, mix, type Scene, type Weather } from './sceneTime';
 
 export const PX = 4; // ドット1つの大きさ（画面上のpx）
 export const TILE = 160; // 1枚のタイル幅（ドット数）。左右の端がつながるように描く
@@ -492,18 +492,17 @@ export const layersOf = (s: Scenery): Layers => {
 
 // 選んだ景色（記録期間の切り替えで、レベルと一緒に初期化・復元される）
 const KEY = 'gamified_scenery';
-// オフライン版（確認用）だけ、全部の景色を試せるようにできる
-const ALL_KEY = 'offline_demo_all_scenery';
-export const allSceneryUnlocked = () => import.meta.env.MODE === 'offline' && localStorage.getItem(ALL_KEY) === '1';
-export const setAllSceneryUnlocked = (on: boolean) => localStorage.setItem(ALL_KEY, on ? '1' : '0');
-
-export const isUnlocked = (s: Scenery, level: number) => level >= s.level || allSceneryUnlocked();
+export const isUnlocked = (s: Scenery, level: number) => level >= s.level || !!getSceneOverride().unlockAll;
 export const loadSceneryId = () => localStorage.getItem(KEY) ?? 'forest';
 export const saveSceneryId = (id: SceneryId) => localStorage.setItem(KEY, id);
-// 選んだ景色。まだ開放されていなければ最初の森
+// 選んだ景色。まだ開放されていなければ最初の森（オフライン版の確認用に選んだ景色があれば、それを優先する）
 export const sceneryFor = (id: string, level: number): Scenery => {
+  const forced = SCENERIES.find((x) => x.id === getSceneOverride().scenery);
+  if (forced) return forced;
   const s = SCENERIES.find((x) => x.id === id);
   return s && isUnlocked(s, level) ? s : SCENERIES[0];
 };
+// その景色での天気（似合わない天気は置きかえる）
+export const sceneIn = (s: Scenery, scene: Scene): Scene => ({ ...scene, weather: s.weather?.[scene.weather] ?? scene.weather });
 // レベルが上がって新しく開放された景色
 export const newlyUnlocked = (before: number, after: number) => SCENERIES.filter((s) => before < s.level && s.level <= after);

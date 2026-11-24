@@ -1,5 +1,5 @@
 // ゲーム版の背景：時間帯（端末の時計）と天気（日付と時刻から決める。全員同じ）
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 export type Phase = 'morning' | 'day' | 'evening' | 'night';
 export type Weather = 'sunny' | 'cloudy' | 'rain' | 'snow' | 'fog';
@@ -46,27 +46,45 @@ export const weatherAt = (date: Date): Weather => {
 
 export const sceneAt = (date: Date): Scene => ({ phase: phaseAt(date), weather: weatherAt(date) });
 
-// オフライン版（確認用）だけ、時間帯と天気を選んで試せる
+// オフライン版（確認用）だけ、時間帯・天気・景色を選んで試せる
+export interface SceneOverride extends Partial<Scene> {
+  scenery?: string;
+  unlockAll?: boolean; // 景色をすべて開放する
+}
 const OVERRIDE_KEY = 'offline_demo_scene';
 const CHANGED = 'scene-override';
-export const getSceneOverride = (): Partial<Scene> => {
+const readOverride = (): SceneOverride => {
   if (import.meta.env.MODE !== 'offline') return {};
   try {
-    const v = JSON.parse(localStorage.getItem(OVERRIDE_KEY) || '{}') as Partial<Scene>;
+    const v = JSON.parse(localStorage.getItem(OVERRIDE_KEY) || '{}') as SceneOverride;
     return {
       ...(v.phase && v.phase in PHASE_LABEL ? { phase: v.phase } : {}),
-      ...(v.weather && v.weather in WEATHER_LABEL ? { weather: v.weather } : {})
+      ...(v.weather && v.weather in WEATHER_LABEL ? { weather: v.weather } : {}),
+      ...(typeof v.scenery === 'string' ? { scenery: v.scenery } : {}),
+      ...(v.unlockAll ? { unlockAll: true } : {})
     };
   } catch {
     return {};
   }
 };
-export const setSceneOverride = (v: Partial<Scene>) => {
+let override = readOverride();
+export const getSceneOverride = () => override;
+export const setSceneOverride = (v: SceneOverride) => {
+  if (import.meta.env.MODE !== 'offline') return;
   localStorage.setItem(OVERRIDE_KEY, JSON.stringify(v));
+  override = readOverride();
   window.dispatchEvent(new Event(CHANGED));
 };
+const subscribeOverride = (listener: () => void) => {
+  window.addEventListener(CHANGED, listener);
+  return () => window.removeEventListener(CHANGED, listener);
+};
+export const useSceneOverride = () => useSyncExternalStore(subscribeOverride, getSceneOverride);
 
-const currentScene = (): Scene => ({ ...sceneAt(new Date()), ...getSceneOverride() });
+const currentScene = (): Scene => {
+  const now = sceneAt(new Date());
+  return { phase: override.phase ?? now.phase, weather: override.weather ?? now.weather };
+};
 
 // 今の時間帯と天気（開いたままでも切り替わる）
 export const useScene = (): Scene => {

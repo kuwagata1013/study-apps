@@ -27,9 +27,9 @@ import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
 import WeatherOverlay from './WeatherOverlay';
-import { sceneColors, useScene } from './sceneTime';
+import { sceneColors, setSceneOverride, useScene, useSceneOverride } from './sceneTime';
 import SceneryPicker from './SceneryPicker';
-import { loadSceneryId, newlyUnlocked, saveSceneryId, sceneryFor, type SceneryId } from './scenery';
+import { loadSceneryId, newlyUnlocked, saveSceneryId, sceneIn, sceneryFor, type SceneryId } from './scenery';
 import { AccountIdCopy, FriendsPanel, PlayerNameEditor } from './FriendsPanel';
 import { countIncomingRequests, savePlayerStats } from '../../lib/players';
 import './GameStage.css';
@@ -204,6 +204,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>('countup');
   const [targetMinutes, setTargetMinutes] = useState(25);
   const baseScene = useScene(); // 背景の時間帯と天気
+  const sceneOverride = useSceneOverride(); // オフライン版で確認用に選んだ背景
   const [sceneryId, setSceneryId] = useState<string>(loadSceneryId); // 選んでいる景色
   const [timerFinished, setTimerFinished] = useState(false); // 減算が終わったときのポップアップ
   // 集中ボーナス用：今回止めずに続けている秒数と、この計測での最長
@@ -671,9 +672,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const bonusPercent = Math.round(streakBonusRate(streakUntilYesterday(logs, protectedDays)) * 100);
   // 選んでいる景色（まだ開放されていなければ最初の森）。似合わない天気は置きかえる
   const scenery = sceneryFor(sceneryId, level);
-  const scene = { ...baseScene, weather: scenery.weather?.[baseScene.weather] ?? baseScene.weather };
+  const scene = sceneIn(scenery, baseScene);
   const pickScenery = (id: SceneryId) => {
     if (id === scenery.id) return;
+    if (sceneOverride.scenery) setSceneOverride({ ...sceneOverride, scenery: undefined });
     setSceneryId(id);
     saveSceneryId(id);
     trackEvent('scenery_change', { label: id });
