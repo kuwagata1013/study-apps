@@ -8,11 +8,10 @@
   image-rendering: pixelated;
 }
 
-/* 木漏れ日の差す明るい空 */
+/* 空（色は時間帯と天気で決める。sceneTime.ts） */
 .forest-sky {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #a9dcef 0%, #c9ecd9 45%, #e4f3c8 75%, #cfe8a8 100%);
 }
 
 .forest-sun {
@@ -26,6 +25,54 @@
   animation: forest-sun-glow 6s ease-in-out infinite;
 }
 
+/* 朝は低く、夕方は地平線の近くに赤い太陽、夜は月 */
+.forest-sun.is-morning {
+  top: 34%;
+  right: 72%;
+}
+.forest-sun.is-evening {
+  top: 44%;
+  right: 12%;
+  width: 96px;
+  height: 96px;
+  background: radial-gradient(circle, rgba(255, 224, 150, 1) 0%, rgba(255, 140, 80, 0.6) 45%, rgba(255, 120, 80, 0) 72%);
+}
+.forest-sun.is-night {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+  right: 8%;
+  background: radial-gradient(circle, rgba(253, 243, 196, 0.4) 0%, rgba(253, 243, 196, 0) 68%);
+}
+.forest-sun.is-faint,
+.forest-stars.is-faint {
+  filter: opacity(0.4);
+}
+
+/* 星（またたく） */
+.forest-stars span {
+  position: absolute;
+  background: #fdf6da;
+  animation: forest-twinkle 4s ease-in-out infinite;
+}
+@keyframes forest-twinkle {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.25; }
+}
+
+/* ゆっくり流れる雲 */
+.forest-clouds span {
+  position: absolute;
+  left: -220px;
+  opacity: 0.85;
+  animation: forest-cloud 120s linear infinite;
+}
+@keyframes forest-cloud {
+  to { transform: translateX(calc(100vw + 440px)); }
+}
+
 /* 斜めに差し込む光の帯 */
 .forest-rays span {
   position: absolute;
@@ -36,6 +83,10 @@
   transform: rotate(18deg);
   transform-origin: top;
   animation: forest-ray 7s ease-in-out infinite;
+}
+.forest-rays.is-morning,
+.forest-rays.is-evening {
+  opacity: 0.5;
 }
 .forest-rays span:nth-child(1) { left: 58%; }
 .forest-rays span:nth-child(2) { left: 70%; width: 28px; animation-delay: -2.5s; }
@@ -73,6 +124,12 @@
   animation-name: forest-float;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
+}
+
+/* 夜はホタル */
+.forest-particles.is-night .forest-particle {
+  background: #e4ff9a;
+  box-shadow: 0 0 10px 4px rgba(200, 255, 110, 0.6);
 }
 
 @keyframes forest-float {
@@ -113,18 +170,6 @@
   50% { opacity: 0.9; }
 }
 
-/* 休憩中は夕暮れ色にする */
-.forest-dusk {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(120, 70, 140, 0.45) 0%, rgba(255, 150, 90, 0.3) 45%, rgba(40, 30, 60, 0.25) 100%);
-  opacity: 1;
-  transition: opacity 1.2s ease;
-  z-index: 1;
-}
-.forest-bg.is-moving .forest-dusk {
-  opacity: 0;
-}
 .forest-layer,
 .forest-particles {
   z-index: 0;
@@ -135,7 +180,20 @@
   .forest-particle,
   .forest-leaf,
   .forest-sun,
+  .forest-stars span,
   .forest-rays span {
     animation: none !important;
+  }
+}
+
+/* スマホではタイマーのパネルに隠れないよう、太陽と月をパネルの下に出す */
+@media (max-width: 767px) {
+  .forest-sun.is-day,
+  .forest-sun.is-morning,
+  .forest-sun.is-evening {
+    top: 40%;
+  }
+  .forest-sun.is-night {
+    top: 37%;
   }
 }

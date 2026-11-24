@@ -26,6 +26,8 @@ import { auth } from '../../firebase';
 import confetti from 'canvas-confetti';
 import ForestBackground from './ForestBackground';
 import CampScene from './CampScene';
+import WeatherOverlay from './WeatherOverlay';
+import { sceneColors, useScene } from './sceneTime';
 import { AccountIdCopy, FriendsPanel, PlayerNameEditor } from './FriendsPanel';
 import { countIncomingRequests, savePlayerStats } from '../../lib/players';
 import './GameStage.css';
@@ -199,6 +201,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 加算（経過時間）と減算（目標時間のカウントダウン）。seconds はどちらでも経過した秒数
   const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>('countup');
   const [targetMinutes, setTargetMinutes] = useState(25);
+  const scene = useScene(); // 背景の時間帯と天気
   const [timerFinished, setTimerFinished] = useState(false); // 減算が終わったときのポップアップ
   // 集中ボーナス用：今回止めずに続けている秒数と、この計測での最長
   const [runSeconds, setRunSeconds] = useState(0);
@@ -663,19 +666,23 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const focusAchieved = Math.max(bestRun, runSeconds) >= FOCUS_BONUS_SECONDS;
 
   return (
-    <div className="game-stage relative h-[100dvh] overflow-hidden bg-slate-950 text-slate-100 antialiased selection:bg-purple-600 selection:text-white">
+    <div
+      data-phase={scene.phase}
+      style={{ '--ground-tint': sceneColors(scene).ground } as React.CSSProperties}
+      className="game-stage relative h-[100dvh] overflow-hidden bg-slate-950 text-slate-100 antialiased selection:bg-purple-600 selection:text-white"
+    >
 
       {/* ===== 画面いっぱいのステージ（ほかのタブを開いている間も後ろで動き続ける） ===== */}
       <div className="fixed inset-0 z-0 overflow-hidden" aria-hidden={activeTab !== 'timer'}>
         <div className="game-world">
           <div className="game-world-inner">
-            {/* 動く森の背景（学習中は景色が流れる） */}
-            <ForestBackground moving={isActive} />
+            {/* 動く森の背景（学習中は景色が流れる。時間帯と天気で変わる） */}
+            <ForestBackground moving={isActive} scene={scene} />
 
             {/* アバター描画：歩行の12コマ（walk_sheet.png）。足元を小道に合わせる。
                 --s は表示の倍率（スマホ 0.42、PC 0.5） */}
             {isActive && (
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-[52px] z-10 [--s:0.42] md:[--s:0.5]">
+              <div className="scene-lit absolute left-1/2 -translate-x-1/2 bottom-[52px] z-10 [--s:0.42] md:[--s:0.5]">
                 <div
                   role="img"
                   aria-label="冒険者アバター歩行中"
@@ -695,7 +702,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
             {!isActive && <CampScene characterSrc={sitUrl} showCaption={false} />}
           </div>
         </div>
-        <div className={`game-ground ${isActive ? '' : 'is-resting'}`} />
+        <div className="game-ground" />
+        <WeatherOverlay weather={scene.weather} />
       </div>
 
       {/* ===== 上部の HUD（レベル・EXP・ライフ・連続日数） ===== */}

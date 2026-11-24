@@ -52,17 +52,32 @@
   image-rendering: pixelated;
 }
 
-/* 休憩中は景色に合わせて夕暮れ色に */
+/* 地面も景色と同じ色（時間帯・天気）にする */
 .game-ground::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(40, 30, 60, 0.32);
-  opacity: 0;
-  transition: opacity 1.2s ease;
+  background: var(--ground-tint, transparent);
 }
-.game-ground.is-resting::after {
-  opacity: 1;
+
+/* キャラクターとキャンプも、暗い時間は景色になじませる */
+.game-stage[data-phase='evening'] .scene-lit {
+  filter: brightness(0.92) sepia(0.12);
+}
+.game-stage[data-phase='night'] .scene-lit {
+  filter: brightness(0.72) saturate(0.85);
+}
+.game-stage[data-phase='night'] .camp-character,
+.game-stage[data-phase='night'] .camp-seat {
+  filter: brightness(0.88);
+}
+.game-stage[data-phase='night'] .camp-tent {
+  filter: brightness(0.6);
+}
+/* 明るい時間はたき火の照り返しを弱める */
+.game-stage[data-phase='morning'] .camp-glow,
+.game-stage[data-phase='day'] .camp-glow {
+  background: radial-gradient(ellipse at center 70%, rgba(255, 170, 70, 0.22) 0%, rgba(255, 140, 60, 0.08) 40%, rgba(255, 140, 60, 0) 70%);
 }
 
 /* 景色の上に重ねる半透明のパネル */

@@ -1,0 +1,80 @@
+/* 雨・雪・霧（WeatherOverlay.tsx） */
+.weather {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  animation: weather-in 1.5s ease-out;
+}
+.weather > span {
+  position: absolute;
+  will-change: transform;
+}
+
+/* タイル（240px）1枚分だけ動かしてループする */
+.weather-rain > span,
+.weather-snow > span {
+  inset: -240px;
+  background-size: 240px 240px;
+  image-rendering: pixelated;
+}
+.weather-rain > span {
+  animation: weather-rain 0.75s linear infinite;
+}
+.weather-rain > span:nth-child(2) {
+  animation-duration: 0.5s;
+}
+.weather-snow > span {
+  animation: weather-snow-a 9s linear infinite;
+}
+.weather-snow > span:nth-child(2) {
+  animation: weather-snow-b 6s linear infinite;
+}
+
+.weather-fog > span {
+  left: -50%;
+  width: 200%;
+  bottom: 12%;
+  height: 60%;
+  background: radial-gradient(ellipse at 30% 60%, rgba(225, 232, 238, 0.4), transparent 55%),
+    radial-gradient(ellipse at 72% 50%, rgba(225, 232, 238, 0.35), transparent 50%);
+  animation: weather-fog 26s ease-in-out infinite alternate;
+}
+.weather-fog > span:nth-child(2) {
+  bottom: 0;
+  animation-duration: 38s;
+  animation-direction: alternate-reverse;
+}
+[data-phase='night'] .weather-fog {
+  opacity: 0.35;
+}
+
+@keyframes weather-in {
+  from { opacity: 0; }
+}
+@keyframes weather-rain {
+  to { transform: translateY(240px); }
+}
+@keyframes weather-snow-a {
+  50% { transform: translate(26px, 120px); }
+  100% { transform: translate(0, 240px); }
+}
+@keyframes weather-snow-b {
+  50% { transform: translate(-34px, 120px); }
+  100% { transform: translate(0, 240px); }
+}
+@keyframes weather-fog {
+  from { transform: translateX(-12%); }
+  to { transform: translateX(12%); }
+}
+
+/* 動きを減らす設定の端末では、粒を止めて薄く見せる */
+@media (prefers-reduced-motion: reduce) {
+  .weather > span {
+    animation: none !important;
+  }
+  .weather-rain,
+  .weather-snow {
+    opacity: 0.5;
+  }
+}
