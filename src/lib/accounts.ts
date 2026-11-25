@@ -70,15 +70,16 @@ export const adminSetParticipantId = async (uid: string, participantId: string) 
   await setDoc(doc(db, 'accounts', uid), { participantId, updatedAt: serverTimestamp() }, { merge: true });
 };
 
-// 管理者用：アカウントのプレイヤー名・フレンドを別のアカウントへ移す（toUid が null なら消すだけ）
+// 管理者用：アカウントのプレイヤー名・フレンド・グループを別のアカウントへ移す（toUid が null なら消すだけ）
 // パスワードの再発行（新しいログインに引き継ぐ）とアカウントの削除で使う。研究データ（ログ）は参加者IDで集計するので触らない
 export const moveAccountData = async (fromUid: string, toUid: string | null) => {
   const playerRef = doc(db, 'players', fromUid);
-  const [playerSnap, friendsSnap, reqFrom, reqTo] = await Promise.all([
+  const [playerSnap, friendsSnap, reqFrom, reqTo, groupsSnap] = await Promise.all([
     getDoc(playerRef),
     getDocs(collection(db, 'players', fromUid, 'friends')),
     getDocs(query(collection(db, 'friendRequests'), where('from', '==', fromUid))),
-    getDocs(query(collection(db, 'friendRequests'), where('to', '==', fromUid)))
+    getDocs(query(collection(db, 'friendRequests'), where('to', '==', fromUid))),
+    getDocs(query(collection(db, 'groups'), where('members', 'array-contains', fromUid)))
   ]);
   const player = playerSnap.exists() ? (playerSnap.data() as Record<string, unknown>) : null;
   const name = typeof player?.name === 'string' ? player.name : '';
@@ -106,6 +107,15 @@ export const moveAccountData = async (fromUid: string, toUid: string | null) => 
     batch.delete(doc(db, 'players', f, 'friends', fromUid));
   }
   [...reqFrom.docs, ...reqTo.docs].forEach((d) => batch.delete(d.ref));
+  // グループ：新しいアカウントに入れ替える。消すだけなら外し、リーダーだったら次の人に渡す（誰もいなくなれば消す）
+  groupsSnap.docs.forEach((d) => {
+    const data = d.data() as { owner?: string; members: string[] };
+    const groupRef = doc(db, 'groups', d.id);
+    const others = data.members.filter((m) => m !== fromUid && m !== toUid);
+    const members = toUid ? [...others, toUid] : others;
+    if (members.length === 0) batch.delete(groupRef);
+    else batch.set(groupRef, { ...data, members, owner: data.owner === fromUid ? (toUid ?? members[0]) : data.owner });
+  });
   if (player) batch.delete(playerRef);
   batch.delete(doc(db, 'accounts', fromUid));
   await batch.commit();

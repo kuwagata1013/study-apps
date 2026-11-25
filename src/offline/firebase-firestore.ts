@@ -52,6 +52,15 @@ const decode = (v: unknown): unknown => {
 };
 
 type Stored = Record<string, Record<string, unknown>>;
+// 配列に足す・配列から除く（updateDoc で使う）
+interface ArrayOp {
+  __arrayOp: 'union' | 'remove';
+  values: unknown[];
+}
+export const arrayUnion = (...values: unknown[]): ArrayOp => ({ __arrayOp: 'union', values });
+export const arrayRemove = (...values: unknown[]): ArrayOp => ({ __arrayOp: 'remove', values });
+const isArrayOp = (v: unknown): v is ArrayOp => !!v && typeof v === 'object' && '__arrayOp' in v;
+
 const load = (path: string): Stored => readJson<Stored>('col_' + path, {});
 const save = (path: string, docs: Stored) => writeJson('col_' + path, docs);
 
@@ -110,6 +119,21 @@ export const setDoc = async (ref: DocumentReference, data: Record<string, unknow
   save(ref.parent, docs);
 };
 
+export const updateDoc = async (ref: DocumentReference, data: Record<string, unknown>) => {
+  const docs = load(ref.parent);
+  const old = docs[ref.id];
+  if (!old) throw new Error('not-found');
+  const next = { ...old };
+  for (const [k, v] of Object.entries(data)) {
+    if (isArrayOp(v)) {
+      const rest = (Array.isArray(old[k]) ? (old[k] as unknown[]) : []).filter((x) => !v.values.includes(x));
+      next[k] = v.__arrayOp === 'union' ? [...rest, ...v.values] : rest;
+    } else next[k] = encode(v);
+  }
+  docs[ref.id] = next;
+  save(ref.parent, docs);
+};
+
 export const addDoc = async (ref: CollectionReference, data: Record<string, unknown>) => {
   const docs = load(ref.path);
   const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
@@ -146,9 +170,10 @@ export const writeBatch = (_db: Db) => {
 type Constraint =
   | { kind: 'orderBy'; field: string; dir: 'asc' | 'desc' }
   | { kind: 'limit'; n: number }
-  | { kind: 'where'; field: string; value: unknown };
-// where は「==」だけに対応
-export const where = (field: string, _op: '==', value: unknown): Constraint => ({ kind: 'where', field, value });
+  | { kind: 'where'; field: string; op: WhereOp; value: unknown };
+type WhereOp = '==' | 'array-contains';
+// where は「==」と「array-contains」だけに対応
+export const where = (field: string, op: WhereOp, value: unknown): Constraint => ({ kind: 'where', field, op, value });
 export const orderBy = (field: string, dir: 'asc' | 'desc' = 'asc'): Constraint => ({ kind: 'orderBy', field, dir });
 export const limit = (n: number): Constraint => ({ kind: 'limit', n });
 
@@ -173,7 +198,11 @@ export const getDocs = async (ref: CollectionReference | Query) => {
   let entries = Object.entries(load(ref.path));
   const constraints = ref.type === 'query' ? ref.constraints : [];
   for (const c of constraints) {
-    if (c.kind === 'where') entries = entries.filter(([, d]) => d[c.field] === c.value);
+    if (c.kind !== 'where') continue;
+    entries = entries.filter(([, d]) => {
+      const v = d[c.field];
+      return c.op === '==' ? v === c.value : Array.isArray(v) && v.includes(c.value);
+    });
   }
   for (const c of [...constraints].reverse()) {
     if (c.kind !== 'orderBy') continue;

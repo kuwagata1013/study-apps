@@ -18,9 +18,10 @@ import {
 } from '../../lib/players';
 import { dayKey, formatMinutes } from './gameStatsUtils';
 import { showConfirm } from '../../lib/dialog';
+import GroupsPanel from './GroupsPanel';
 
 // 今日の勉強時間（相手の記録が今日のものでなければ 0 分）
-const todayMinutesOf = (f: PlayerProfile) => (f.todayKey === dayKey(new Date()) ? f.todayMinutes : 0);
+export const todayMinutesOf = (f: PlayerProfile) => (f.todayKey === dayKey(new Date()) ? f.todayMinutes : 0);
 
 // クリップボードにコピー（使えない環境では選択してコピーする方法に切り替える）
 const copyText = async (text: string) => {
@@ -47,16 +48,19 @@ const copyText = async (text: string) => {
 };
 
 // アカウントIDとコピーボタン
-export const AccountIdCopy: React.FC<{ uid: string }> = ({ uid }) => {
+export const AccountIdCopy: React.FC<{ uid: string }> = ({ uid }) => <CopyBox text={uid} />;
+
+// 文字とコピーボタン
+export const CopyBox: React.FC<{ text: string }> = ({ text }) => {
   const [copied, setCopied] = useState<'ok' | 'ng' | null>(null);
   const onCopy = async () => {
-    setCopied((await copyText(uid)) ? 'ok' : 'ng');
+    setCopied((await copyText(text)) ? 'ok' : 'ng');
     setTimeout(() => setCopied(null), 2000);
   };
   return (
     <div className="flex items-center gap-2">
       <code className="flex-1 min-w-0 truncate font-mono text-[11px] text-white/80 bg-[#312117] border border-[#fdd69f]/15 rounded-lg px-2.5 py-2 select-all">
-        {uid}
+        {text}
       </code>
       <button
         onClick={onCopy}
@@ -167,9 +171,10 @@ const RequestRow: React.FC<{ p: PlayerProfile; children: React.ReactNode }> = ({
   </div>
 );
 
-// フレンドタブ
+// フレンドタブ（フレンドとグループを切り替える）
 // onIncomingCount: 届いている申請の数が変わったら知らせる（タブの印に使う）
 export const FriendsPanel: React.FC<{ uid: string | null; onIncomingCount?: (n: number) => void }> = ({ uid, onIncomingCount }) => {
+  const [view, setView] = useState<'friends' | 'groups'>('friends');
   const [friends, setFriends] = useState<PlayerProfile[]>([]);
   const [incoming, setIncoming] = useState<PlayerProfile[]>([]);
   const [outgoing, setOutgoing] = useState<PlayerProfile[]>([]);
@@ -275,9 +280,9 @@ export const FriendsPanel: React.FC<{ uid: string | null; onIncomingCount?: (n: 
     <div className="bg-[#312117]/90 rounded-3xl p-5 md:p-6 shadow-xl border border-[#fdd69f]/20 space-y-4 md:max-w-lg md:mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-bold text-white flex items-center gap-2">
-          <Users size={18} className="text-[#fdd69f]" /> フレンド
+          <Users size={18} className="text-[#fdd69f]" /> {view === 'friends' ? 'フレンド' : 'グループ'}
         </h2>
-        {uid && (
+        {uid && view === 'friends' && (
           <button
             onClick={() => void load()}
             disabled={loading}
@@ -289,12 +294,35 @@ export const FriendsPanel: React.FC<{ uid: string | null; onIncomingCount?: (n: 
         )}
       </div>
 
+      {uid && (
+        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#1f140d] border border-[#fdd69f]/20">
+          {(
+            [
+              ['friends', 'フレンド'],
+              ['groups', 'グループ']
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setView(id)}
+              aria-pressed={view === id}
+              className={`py-2 rounded-lg text-xs font-bold transition ${view === id ? 'bg-[#fdd69f] text-[#312117]' : 'text-[#fdd69f]/70 hover:text-[#fdd69f]'}`}
+            >
+              {label}
+              {id === 'friends' && incoming.length > 0 && <span className="ml-1 inline-block w-2 h-2 rounded-full bg-red-500" aria-label="フレンド申請あり" />}
+            </button>
+          ))}
+        </div>
+      )}
+
       {!uid ? (
         <div className="p-6 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 text-center space-y-2">
           <Users size={32} className="mx-auto text-[#fdd69f]/60" />
-          <p className="text-sm font-bold text-white">ログインするとフレンド機能が使えます</p>
+          <p className="text-sm font-bold text-white">ログインするとフレンドとグループが使えます</p>
           <p className="text-xs text-white/55">プロフィールの「モードを再選択する」からスタート画面に戻り、配られた参加者IDとパスワードでログインしてください</p>
         </div>
+      ) : view === 'groups' ? (
+        <GroupsPanel uid={uid} />
       ) : (
         <>
           <div className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2">

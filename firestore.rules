@@ -251,6 +251,65 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/players/$(request.auth.uid)/friends/$(request.resource.data.to));
     }
 
+    // グループ（ドキュメントIDは招待コード）。コードを知っている人だけが1件ずつ開ける。一覧は自分が入っているものだけ
+    match /groups/{code} {
+      allow get: if request.auth != null;
+      allow list: if request.auth != null && (request.auth.uid in resource.data.members || isAdmin());
+      allow create: if request.auth != null
+        && code.matches('^[A-HJ-NP-Z2-9]{8}$')
+        && isValidGroup(request.resource.data)
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.createdAt == request.time
+        && exists(/databases/$(database)/documents/players/$(request.auth.uid));
+      // 管理者はメンバーの追加・削除と、パスワードの再発行（新しいアカウントへの引き継ぎ）・アカウントの削除のときに書く
+      allow update: if request.auth != null
+        && isValidGroup(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (isAdmin()
+          || isGroupJoin(request.auth.uid, resource.data, request.resource.data)
+          || isGroupLeave(request.auth.uid, resource.data, request.resource.data)
+          || isGroupOwnerEdit(request.auth.uid, resource.data, request.resource.data));
+      // 解散
+      allow delete: if request.auth != null && (resource.data.owner == request.auth.uid || isAdmin());
+    }
+
+    function isValidGroup(d) {
+      return d.keys().hasOnly(['name', 'owner', 'members', 'createdAt'])
+        && d.keys().hasAll(['name', 'owner', 'members', 'createdAt'])
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 20
+        && d.owner is string
+        && d.members is list && d.members.size() >= 1 && d.members.size() <= 20
+        && d.members.toSet().size() == d.members.size()
+        && d.owner in d.members;
+    }
+    // 参加：自分をメンバーに足すだけ
+    function isGroupJoin(uid, before, after) {
+      return after.diff(before).affectedKeys().hasOnly(['members'])
+        && !(uid in before.members)
+        && after.members.size() == before.members.size() + 1
+        && after.members.hasAll(before.members)
+        && uid in after.members
+        && exists(/databases/$(database)/documents/players/$(uid));
+    }
+    // 退出：自分をメンバーから除くだけ。リーダーなら、残るメンバーにリーダーを渡す
+    function isGroupLeave(uid, before, after) {
+      return after.diff(before).affectedKeys().hasOnly(['members', 'owner'])
+        && uid in before.members
+        && !(uid in after.members)
+        && after.members.size() == before.members.size() - 1
+        && before.members.hasAll(after.members)
+        && (after.owner == before.owner || before.owner == uid);
+    }
+    // リーダー：名前を変える、またはメンバーを1人外す
+    function isGroupOwnerEdit(uid, before, after) {
+      return before.owner == uid && after.owner == uid
+        && (after.diff(before).affectedKeys().hasOnly(['name'])
+          || (after.diff(before).affectedKeys().hasOnly(['members'])
+            && after.members.size() == before.members.size() - 1
+            && before.members.hasAll(after.members)));
+    }
+
     // それ以外はすべて拒否
     match /{document=**} {
       allow read, write: if false;

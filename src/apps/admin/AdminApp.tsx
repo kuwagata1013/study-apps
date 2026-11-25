@@ -11,6 +11,7 @@ import {
   Pause,
   Users,
   ListChecks,
+  UsersRound,
   Download
 } from 'lucide-react';
 import ResearchDataPanel from './ResearchDataPanel';
@@ -18,6 +19,7 @@ import ParticipantAccountsPanel from './ParticipantAccountsPanel';
 import IssueAccountsForm from './IssueAccountsForm';
 import AdminAccountsPanel from './AdminAccountsPanel';
 import QuestSettingsPanel from './QuestSettingsPanel';
+import AdminGroupsPanel from './AdminGroupsPanel';
 import { auth } from '../../firebase';
 import { recordAdminProfile } from '../../lib/admins';
 import { BGM_SOURCES } from '../../lib/bgm';
@@ -45,7 +47,7 @@ const DEFAULT_BGM_LIST: BgmTrack[] = [
 const DEFAULT_IDS = new Set(DEFAULT_BGM_LIST.map((t) => t.id));
 
 export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
-  const [activeTab, setActiveTab] = useState<'bgm' | 'database' | 'accounts' | 'quests'>('bgm');
+  const [activeTab, setActiveTab] = useState<'bgm' | 'database' | 'accounts' | 'groups' | 'quests'>('bgm');
   // 発行したら一覧を読み直す
   const [accountsVersion, setAccountsVersion] = useState(0);
 
@@ -175,10 +177,10 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
       <main className="max-w-3xl mx-auto p-4 space-y-6 pt-6">
         
         {/* ナビゲーションタブ */}
-        <div className="flex bg-black p-1.5 rounded-2xl border border-neutral-800 gap-1">
+        <div className="flex flex-wrap bg-black p-1.5 rounded-2xl border border-neutral-800 gap-1">
           <button
             onClick={() => setActiveTab('bgm')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+            className={`flex-1 px-2 py-2.5 whitespace-nowrap rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
               activeTab === 'bgm' ? 'bg-sky-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'
             }`}
           >
@@ -187,7 +189,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
           
           <button
             onClick={() => setActiveTab('database')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+            className={`flex-1 px-2 py-2.5 whitespace-nowrap rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
               activeTab === 'database' ? 'bg-sky-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'
             }`}
           >
@@ -196,7 +198,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
 
           <button
             onClick={() => setActiveTab('accounts')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+            className={`flex-1 px-2 py-2.5 whitespace-nowrap rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
               activeTab === 'accounts' ? 'bg-sky-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'
             }`}
           >
@@ -204,8 +206,17 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
           </button>
 
           <button
+            onClick={() => setActiveTab('groups')}
+            className={`flex-1 px-2 py-2.5 whitespace-nowrap rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+              activeTab === 'groups' ? 'bg-sky-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <UsersRound size={16} /> グループ
+          </button>
+
+          <button
             onClick={() => setActiveTab('quests')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+            className={`flex-1 px-2 py-2.5 whitespace-nowrap rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
               activeTab === 'quests' ? 'bg-sky-600 text-white shadow-md' : 'text-neutral-400 hover:text-white'
             }`}
           >
@@ -328,6 +339,9 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onExitAdmin }) => {
             <ParticipantAccountsPanel key={accountsVersion} />
           </div>
         )}
+
+        {/* ===== グループ ===== */}
+        {activeTab === 'groups' && <AdminGroupsPanel />}
 
         {/* ===== TAB 4: デイリークエストの設定 ===== */}
         {activeTab === 'quests' && <QuestSettingsPanel />}
