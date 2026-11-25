@@ -68,13 +68,26 @@
   to { transform: translateX(12%); }
 }
 
-/* 動きを減らす設定の端末では、粒を止めて薄く見せる */
+/* 動きを減らす設定（スマホの省電力モードなどでもなる）の端末では、霧は止め、雨と雪はゆっくり薄く降らせる
+   （止めると、雨粒が宙に浮いて見えてしまうため） */
 @media (prefers-reduced-motion: reduce) {
-  .weather > span {
-    animation: none !important;
+  .weather-fog > span {
+    animation: none;
   }
   .weather-rain,
   .weather-snow {
-    opacity: 0.5;
+    opacity: 0.6;
+  }
+  .weather-rain > span {
+    animation-duration: 1.5s;
+  }
+  .weather-rain > span:nth-child(2) {
+    animation-duration: 1.1s;
+  }
+  .weather-snow > span {
+    animation-duration: 14s;
+  }
+  .weather-snow > span:nth-child(2) {
+    animation-duration: 10s;
   }
 }
