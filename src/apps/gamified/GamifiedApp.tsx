@@ -201,7 +201,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 3. タイマー関連ステート
   const [seconds, setSeconds] = useState(0);
   const [isActive, setIsActive] = useState(false);
-  const [subject, setSubject] = useState('英語');
+  const [subject, setSubject] = useState(''); // 教科は毎回自分で選ぶ（選ぶまで開始できない）
   const [memo, setMemo] = useState('');
   // 加算（経過時間）と減算（目標時間のカウントダウン）。seconds はどちらでも経過した秒数
   const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>('countup');
@@ -609,6 +609,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     setSeconds(0);
     setRunSeconds(0);
     setMemo('');
+    setSubject('');
   };
 
   // 今日のデイリークエストと、クリアの状況
@@ -857,7 +858,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                 </p>
               )}
               {/* 教科選択 */}
-              <div className="flex justify-center flex-wrap gap-1.5 mt-2.5">
+              {!subject && <p className="text-[10px] font-bold text-[#fdd69f] mt-2">教科を選ぶと学習を開始できます</p>}
+              <div className={`flex justify-center flex-wrap gap-1.5 ${subject ? 'mt-2.5' : 'mt-1.5'}`}>
                 {['国語', '数学', '英語', '理科', '社会', 'その他'].map((sub) => (
                   <button
                     key={sub}
@@ -908,14 +910,15 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   }
                   setIsActive(!isActive);
                 }}
-                className={`flex-1 h-14 rounded-2xl font-black text-base transition flex items-center justify-center gap-2 shadow-xl shadow-black/40 border-2 ${
+                disabled={!isActive && !subject}
+                className={`flex-1 h-14 rounded-2xl font-black text-base transition flex items-center justify-center gap-2 shadow-xl shadow-black/40 border-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100 ${
                   isActive
                     ? 'bg-[#312117] text-[#fdd69f] border-[#fdd69f]/70 hover:bg-[#3f2b1e]'
                     : 'bg-[#fdd69f] text-[#312117] border-[#fdd69f] hover:brightness-110'
                 }`}
               >
                 {isActive ? <Pause size={20} /> : <Play size={20} />}
-                {isActive ? '一時停止' : seconds > 0 ? '冒険を再開' : '学習開始'}
+                {isActive ? '一時停止' : !subject ? '教科を選んでください' : seconds > 0 ? '冒険を再開' : '学習開始'}
               </button>
               <button
                 onClick={toggleBgm}
@@ -936,6 +939,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                   setSeconds(0);
                   setRunSeconds(0);
                   setBestRun(0);
+                  setSubject('');
                   sessionStartRef.current = null;
                 }}
                 className="game-glass w-14 h-14 shrink-0 rounded-2xl text-[#fdd69f] hover:bg-[#fdd69f]/10 transition flex items-center justify-center"

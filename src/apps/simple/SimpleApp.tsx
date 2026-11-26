@@ -74,7 +74,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const [seconds, setSeconds] = useState(0);
   const [elapsedSecondsCount, setElapsedSecondsCount] = useState(0);
   const [isActive, setIsActive] = useState(false);
-  const [subject, setSubject] = useState('英語');
+  const [subject, setSubject] = useState(''); // 教科は毎回自分で選ぶ（選ぶまで開始できない）
   const [memo, setMemo] = useState('');
 
   // 3. データステート
@@ -255,6 +255,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     setSeconds(timerMode === 'countdown' ? targetMinutes * 60 : 0);
     setElapsedSecondsCount(0);
     setMemo('');
+    setSubject('');
     showAlert(`学習ログを保存しました（${formatTimeDetail(recordSeconds)}）`);
   };
 
@@ -371,7 +372,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                     </button>
                   ))}
                 </div>
-
+                {!subject && <p className="text-xs font-bold text-gray-500">教科を選ぶと計測を開始できます</p>}
               </div>
 
               {/* タイマー表示 */}
@@ -394,12 +395,13 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                     trackEvent(isActive ? 'timer_pause' : 'timer_start', { label: subject, seconds: elapsedSecondsCount });
                     setIsActive(!isActive);
                   }}
-                  className={`flex-1 py-4 rounded-2xl font-bold text-white transition flex items-center justify-center gap-2 shadow-md ${
+                  disabled={!isActive && !subject}
+                  className={`flex-1 py-4 rounded-2xl font-bold text-white transition flex items-center justify-center gap-2 shadow-md disabled:bg-gray-300 disabled:shadow-none disabled:cursor-not-allowed ${
                     isActive ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-900 hover:bg-gray-800'
                   }`}
                 >
                   {isActive ? <Pause size={20} /> : <Play size={20} />}
-                  {isActive ? '一時停止' : '計測開始'}
+                  {isActive ? '一時停止' : !subject ? '教科を選んでください' : '計測開始'}
                 </button>
                 
                 <button
@@ -408,6 +410,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                     setIsActive(false);
                     setSeconds(timerMode === 'countdown' ? targetMinutes * 60 : 0);
                     setElapsedSecondsCount(0);
+                    setSubject('');
                     sessionStartRef.current = null;
                   }}
                   className="p-4 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-2xl transition"
