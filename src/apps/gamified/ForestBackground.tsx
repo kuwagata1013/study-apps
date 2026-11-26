@@ -54,30 +54,94 @@ const LEAVES = Array.from({ length: 5 }, (_, i) => {
   };
 });
 
-// 横に流れる1枚のレイヤー（遠景・中景・近景）。タイル1枚分だけ動かしてループする
+// 横に流れる3枚のレイヤー（遠景・中景・近景）。
+// CSS のアニメーションで動かすと、iPhone（Safari）はまれに動いている層を1〜2コマ描き落として景色が消えるため、
+// 画面の幅ぶんのキャンバスに、毎コマ自分で描いて流す（絵はドット1つ＝1px のタイルを拡大して貼る）
 const TILE_PX = TILE * PX;
-// どんな画面幅でもすき間が出ないよう、画面幅＋タイル1枚分以上を並べておく
-const tileCount = () => Math.ceil(Math.max(window.innerWidth, window.screen?.width ?? 0, 1920) / TILE_PX) + 1;
-const LayerCanvas: React.FC<{ art: Layer; tint?: { color: string; amount: number }; speed: number; bottom: number }> = ({ art, tint, speed, bottom }) => {
-  const ref = useRef<HTMLCanvasElement>(null);
-  const tiles = useMemo(tileCount, []);
+type Tint = { color: string; amount: number } | undefined;
+interface LayerDef {
+  key: string;
+  art: Layer;
+  tint: Tint;
+  speed: number; // 1秒に流れる px
+  bottom: number; // ドット単位
+}
+
+const ScrollingLayers: React.FC<{ layers: LayerDef[]; moving: boolean }> = ({ layers, moving }) => {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const walkedRef = useRef(0); // 歩いた秒数の合計（各レイヤーの位置はこれ×速さで決まる）
+
+  // 各レイヤーのタイル（小さな絵）を作る
+  const tiles = useMemo(
+    () =>
+      layers.map((l) => {
+        const c = document.createElement('canvas');
+        paintLayer(c, l.art, l.tint, 1);
+        return c;
+      }),
+    [layers]
+  );
+
   useEffect(() => {
-    if (ref.current) paintLayer(ref.current, art, tint, tiles);
-  }, [art, tint, tiles]);
+    const box = boxRef.current;
+    if (!box) return;
+    let width = 0;
+    const draw = () => {
+      layers.forEach((l, i) => {
+        const canvas = canvasRefs.current[i];
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+        const h = l.art.height * PX;
+        if (canvas.width !== width || canvas.height !== h) {
+          canvas.width = width;
+          canvas.height = h;
+        }
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, width, h);
+        const offset = Math.round((walkedRef.current * l.speed) % TILE_PX);
+        for (let x = -offset; x < width; x += TILE_PX) ctx.drawImage(tiles[i], x, 0, TILE_PX, h);
+      });
+    };
+    const resize = () => {
+      width = Math.max(1, Math.ceil(box.clientWidth));
+      draw();
+    };
+    resize();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
+    ro?.observe(box);
+    window.addEventListener('resize', resize);
+
+    let raf = 0;
+    let last = 0;
+    const frame = (now: number) => {
+      // 裏に回っていた間などで間が空いたときは、まとめて進めない
+      if (last) walkedRef.current += Math.min(0.1, (now - last) / 1000);
+      last = now;
+      draw();
+      raf = requestAnimationFrame(frame);
+    };
+    if (moving) raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+      window.removeEventListener('resize', resize);
+    };
+  }, [layers, tiles, moving]);
+
   return (
-    <canvas
-      ref={ref}
-      className="forest-layer"
-      style={
-        {
-          bottom: bottom * PX,
-          width: TILE_PX * tiles,
-          height: art.height * PX,
-          '--tile': `${TILE_PX}px`,
-          animationDuration: `${TILE_PX / speed}s`
-        } as React.CSSProperties
-      }
-    />
+    <div ref={boxRef} className="forest-layers">
+      {layers.map((l, i) => (
+        <canvas
+          key={l.key}
+          ref={(el) => {
+            canvasRefs.current[i] = el;
+          }}
+          className="forest-layer"
+          style={{ bottom: l.bottom * PX, height: l.art.height * PX }}
+        />
+      ))}
+    </div>
   );
 };
 
@@ -143,9 +207,7 @@ export const ForestBackground: React.FC<ForestBackgroundProps> = ({ moving, scen
         ))}
       </div>
 
-      {layers.map((layer) => (
-        <LayerCanvas key={layer.key} art={layer.art} tint={layer.tint} speed={layer.speed} bottom={layer.bottom} />
-      ))}
+      <ScrollingLayers layers={layers} moving={moving} />
 
       <div className={`forest-particles is-${phase}`}>
         {dry && PARTICLES.map((p, i) => (

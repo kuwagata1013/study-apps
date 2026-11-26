@@ -77,6 +77,44 @@ const WALK_FRAMES: [number, number][] = [
 ];
 const WALK_FRAME_COUNT = WALK_FRAMES.length;
 const WALK_FRAME_MS = 140; // 1コマの表示時間（ミリ秒）
+
+// 計測中のタイマーを端末に残しておく。iPhone などは画面を消している間やほかのアプリを使っている間に
+// ページを読み直すことがあり、そのままだと計測中の時間が消えて記録できなくなるため。
+// （端末ごとの一時的な状態なので、gamified_ で始まる名前にせず、アカウントの同期には乗せない）
+const TIMER_KEY = 'timer_running_gamified';
+interface SavedTimer {
+  uid: string | null;
+  seconds: number;
+  active: boolean;
+  at: number; // 保存した時刻（計測中なら、ここからの経過も足す）
+  mode: 'countup' | 'countdown';
+  target: number;
+  subject: string;
+  runSeconds: number;
+  bestRun: number;
+  sessionStart: number | null;
+}
+const restoreTimer = (uid: string | null): (SavedTimer & { finished: boolean }) | null => {
+  try {
+    const t = JSON.parse(localStorage.getItem(TIMER_KEY) ?? 'null') as SavedTimer | null;
+    if (!t || t.uid !== uid || !(t.seconds >= 0)) return null;
+    let { seconds, runSeconds, active } = t;
+    let finished = false;
+    if (active) {
+      const limit = t.mode === 'countdown' ? t.target * 60 : Infinity;
+      const step = Math.min(Math.max(0, Math.floor((Date.now() - t.at) / 1000)), Math.max(0, limit - seconds));
+      seconds += step;
+      runSeconds += step;
+      if (seconds >= limit) {
+        active = false;
+        finished = true;
+      }
+    }
+    return { ...t, seconds, runSeconds, active, finished };
+  } catch {
+    return null;
+  }
+};
 import { saveResearchLog } from '../../lib/researchLog';
 import {
   allClearExp,
@@ -199,21 +237,22 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // 最新のレベルと EXP（読み込み直後にも正しく足せるよう state とは別に持つ）
   const progressRef = useRef({ level: 1, exp: 0 });
 
-  // 3. タイマー関連ステート
-  const [seconds, setSeconds] = useState(0);
-  const [isActive, setIsActive] = useState(false);
-  const [subject, setSubject] = useState(''); // 教科は毎回自分で選ぶ（選ぶまで開始できない）
+  // 3. タイマー関連ステート（読み直す前に計測していたら、その続きから）
+  const [restored] = useState(() => restoreTimer(user?.uid ?? null));
+  const [seconds, setSeconds] = useState(restored?.seconds ?? 0);
+  const [isActive, setIsActive] = useState(restored?.active ?? false);
+  const [subject, setSubject] = useState(restored?.subject ?? ''); // 教科は毎回自分で選ぶ（選ぶまで開始できない）
   const [memo, setMemo] = useState('');
   // 加算（経過時間）と減算（目標時間のカウントダウン）。seconds はどちらでも経過した秒数
-  const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>('countup');
-  const [targetMinutes, setTargetMinutes] = useState(25);
+  const [timerMode, setTimerMode] = useState<'countup' | 'countdown'>(restored?.mode ?? 'countup');
+  const [targetMinutes, setTargetMinutes] = useState(restored?.target ?? 25);
   const baseScene = useScene(); // 背景の時間帯と天気
   const sceneOverride = useSceneOverride(); // オフライン版で確認用に選んだ背景
   const [sceneryId, setSceneryId] = useState<string>(loadSceneryId); // 選んでいる景色
-  const [timerFinished, setTimerFinished] = useState(false); // 減算が終わったときのポップアップ
+  const [timerFinished, setTimerFinished] = useState(restored?.finished ?? false); // 減算が終わったときのポップアップ
   // 集中ボーナス用：今回止めずに続けている秒数と、この計測での最長
-  const [runSeconds, setRunSeconds] = useState(0);
-  const [bestRun, setBestRun] = useState(0);
+  const [runSeconds, setRunSeconds] = useState(restored?.runSeconds ?? 0);
+  const [bestRun, setBestRun] = useState(restored?.bestRun ?? 0);
 
   // 4. アニメーション用フレームステート（1〜8）
   const [currentFrame, setCurrentFrame] = useState(1);
@@ -347,11 +386,15 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     }
   }, []);
 
-  // 最新の経過秒数（タイマーの処理の中で使う）
+  // 最新の経過秒数・目標時間・教科（タイマーの処理の中で使う）
   const secondsRef = useRef(seconds);
+  const targetRef = useRef(targetMinutes);
+  const subjectRef = useRef(subject);
   useEffect(() => {
     secondsRef.current = seconds;
-  }, [seconds]);
+    targetRef.current = targetMinutes;
+    subjectRef.current = subject;
+  }, [seconds, targetMinutes, subject]);
 
   // タイマー作動中（isActive === true）の秒数カウント
   useEffect(() => {
@@ -365,7 +408,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       if (delta <= 0) return;
       lastTick += delta * 1000;
       // 減算のときは目標時間で止める
-      const limit = timerMode === 'countdown' ? targetMinutes * 60 : Infinity;
+      const limit = timerMode === 'countdown' ? targetRef.current * 60 : Infinity;
       const step = Math.min(delta, Math.max(0, limit - secondsRef.current));
       const next = secondsRef.current + step;
       secondsRef.current = next;
@@ -374,8 +417,8 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
       if (next >= limit) {
         done = true;
         stop();
-        fireAlarm(subject, targetMinutes);
-        trackEvent('timer_finish', { label: subject, count: targetMinutes });
+        fireAlarm(subjectRef.current, targetRef.current);
+        trackEvent('timer_finish', { label: subjectRef.current, count: targetRef.current });
         setIsActive(false);
         setTimerFinished(true);
       }
@@ -399,7 +442,32 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   };
 
   // 計測セッションの開始時刻（最初に開始を押した時刻。保存・リセットで解除）
-  const sessionStartRef = useRef<number | null>(null);
+  const sessionStartRef = useRef<number | null>(restored?.sessionStart ?? null);
+
+  // 計測の状態を端末に残す（何もしていないときは消す）
+  useEffect(() => {
+    try {
+      if (seconds === 0 && !isActive) {
+        localStorage.removeItem(TIMER_KEY);
+        return;
+      }
+      const t: SavedTimer = {
+        uid: user?.uid ?? null,
+        seconds,
+        active: isActive,
+        at: Date.now(),
+        mode: timerMode,
+        target: targetMinutes,
+        subject,
+        runSeconds,
+        bestRun,
+        sessionStart: sessionStartRef.current
+      };
+      localStorage.setItem(TIMER_KEY, JSON.stringify(t));
+    } catch {
+      // 保存できなくても計測は続ける
+    }
+  }, [seconds, isActive, timerMode, targetMinutes, subject, runSeconds, bestRun, user]);
   useEffect(() => {
     if (isActive && sessionStartRef.current === null) {
       sessionStartRef.current = Date.now();

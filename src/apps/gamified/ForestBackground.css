@@ -92,24 +92,16 @@
 .forest-rays span:nth-child(2) { left: 70%; width: 28px; animation-delay: -2.5s; }
 .forest-rays span:nth-child(3) { left: 84%; width: 60px; animation-delay: -5s; }
 
-/* 横に流れる各レイヤー（タイル1枚分だけ動かしてループ） */
+/* 横に流れる各レイヤー（ForestBackground.tsx の ScrollingLayers が毎コマ描く） */
+.forest-layers {
+  position: absolute;
+  inset: 0;
+}
 .forest-layer {
   position: absolute;
   left: 0;
-  background-repeat: repeat-x;
-  background-position: left bottom;
-  animation-name: forest-scroll;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-  animation-play-state: paused;
-}
-.forest-bg.is-moving .forest-layer {
-  animation-play-state: running;
-}
-
-@keyframes forest-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(calc(-1 * var(--tile))); }
+  width: 100%;
+  display: block;
 }
 
 /* 光の粒（ホタル・花粉） */
