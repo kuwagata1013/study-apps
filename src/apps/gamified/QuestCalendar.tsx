@@ -1,7 +1,7 @@
 // 戦績タブに出すカレンダー（学習した日・クエストをクリアした日・クリスタルで守った日）
 import React, { useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Gem } from 'lucide-react';
-import { dayKey, formatMinutes, logTime, pad, WEEKDAYS, type StatsLog } from './gameStatsUtils';
+import { dayKey, formatMinutes, logDay, studyNow, pad, WEEKDAYS, type StatsLog } from './gameStatsUtils';
 
 export interface CalendarTask {
   id: string;
@@ -30,9 +30,9 @@ const heatClass = (min: number) =>
   min >= 120 ? 'bg-[#fdd69f]/70' : min >= 60 ? 'bg-[#fdd69f]/45' : min >= 30 ? 'bg-[#fdd69f]/28' : min > 0 ? 'bg-[#fdd69f]/15' : '';
 
 export const QuestCalendar: React.FC<Props> = ({ logs, tasks, protectedDays }) => {
-  const today = dayKey(new Date());
+  const today = dayKey(studyNow());
   const [cursor, setCursor] = useState(() => {
-    const d = new Date();
+    const d = studyNow();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [selected, setSelected] = useState(today);
@@ -46,7 +46,7 @@ export const QuestCalendar: React.FC<Props> = ({ logs, tasks, protectedDays }) =
   const byDay = useMemo(() => {
     const map = new Map<string, StatsLog[]>();
     for (const l of logs) {
-      const k = dayKey(logTime(l));
+      const k = dayKey(logDay(l));
       map.set(k, [...(map.get(k) ?? []), l]);
     }
     return map;

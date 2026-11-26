@@ -1,4 +1,6 @@
 // ゲーム版の学習記録の集計に使う型と関数
+import { studyDate, studyNow } from '../../lib/studyDay';
+export { studyNow };
 
 export interface StatsLog {
   id: string;
@@ -26,6 +28,33 @@ export const logTime = (log: StatsLog): Date => {
   return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
 };
 
+// 記録が属する学習日（午前4時で日付が変わる。0時〜4時の記録は前の日）
+export const logDay = (log: StatsLog): Date => studyDate(logTime(log));
+
+// その日が入っている週の月曜（学習日で数える。月曜の午前4時から次の月曜の午前4時までが1週）
+export const weekStartOf = (d: Date) => {
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  return m;
+};
+export const WEEK_LABELS = ['月', '火', '水', '木', '金', '土', '日'];
+
+// 今週の日ごとの勉強時間（分）。月曜から日曜の7つ
+export const thisWeekDays = (logs: StatsLog[], now: Date = studyNow()) => {
+  const start = weekStartOf(now);
+  const keys = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    return dayKey(d);
+  });
+  const out = [0, 0, 0, 0, 0, 0, 0];
+  for (const l of logs) {
+    const i = keys.indexOf(dayKey(logDay(l)));
+    if (i >= 0) out[i] += l.durationMinutes;
+  }
+  return { days: out, weekKey: keys[0], todayIndex: (now.getDay() + 6) % 7 };
+};
+
 export const formatMinutes = (m: number) => {
   const total = Math.round(m);
   if (total < 60) return `${total}分`;
@@ -36,7 +65,7 @@ export const formatMinutes = (m: number) => {
 
 // 学習した日（ライフクリスタルで守った日も含める）
 const studyDays = (logs: StatsLog[], protectedDays: string[] = []) =>
-  new Set([...logs.map((l) => dayKey(logTime(l))), ...protectedDays]);
+  new Set([...logs.map((l) => dayKey(logDay(l))), ...protectedDays]);
 
 const countBack = (days: Set<string>, from: Date) => {
   const d = new Date(from);
@@ -51,14 +80,14 @@ const countBack = (days: Set<string>, from: Date) => {
 // 今日（まだなら昨日）からさかのぼって、続けて学習した日数
 export const studyStreak = (logs: StatsLog[], protectedDays: string[] = []) => {
   const days = studyDays(logs, protectedDays);
-  const d = new Date();
+  const d = studyNow();
   if (!days.has(dayKey(d))) d.setDate(d.getDate() - 1);
   return countBack(days, d);
 };
 
 // 昨日までの連続日数（今日の連続ボーナスの計算に使う）
 export const streakUntilYesterday = (logs: StatsLog[], protectedDays: string[] = []) => {
-  const d = new Date();
+  const d = studyNow();
   d.setDate(d.getDate() - 1);
   return countBack(studyDays(logs, protectedDays), d);
 };
@@ -72,11 +101,11 @@ export const streakBonusRate = (daysBefore: number) => Math.min(STREAK_BONUS_MAX
 export const missedDays = (logs: StatsLog[], protectedDays: string[] = []): string[] => {
   const days = studyDays(logs, protectedDays);
   if (days.size === 0) return [];
-  const today = dayKey(new Date());
+  const today = dayKey(studyNow());
   const last = [...days].filter((k) => k < today).sort().pop();
   if (!last) return [];
   const out: string[] = [];
-  const d = new Date();
+  const d = studyNow();
   d.setDate(d.getDate() - 1);
   while (dayKey(d) > last) {
     out.push(dayKey(d));

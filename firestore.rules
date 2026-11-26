@@ -164,7 +164,7 @@ service cloud.firestore {
 
     // 名前は必須（ログイン後に最初に決める）。レベル・称号・連続日数はゲーム版を使うと入る
     function isValidPlayer(d) {
-      return d.keys().hasOnly(['name', 'level', 'title', 'streakDays', 'todayMinutes', 'todayKey', 'updatedAt'])
+      return d.keys().hasOnly(['name', 'level', 'title', 'streakDays', 'todayMinutes', 'todayKey', 'weekMinutes', 'weekDays', 'weekKey', 'updatedAt'])
         && d.keys().hasAll(['name', 'updatedAt'])
         && d.name is string && d.name.size() >= 1 && d.name.size() <= 20
         && (!('level' in d) || (d.level is int && d.level >= 1 && d.level <= 100000))
@@ -173,6 +173,12 @@ service cloud.firestore {
         // その日の勉強時間（分）と日付（YYYY-MM-DD）
         && (!('todayMinutes' in d) || (d.todayMinutes is int && d.todayMinutes >= 0 && d.todayMinutes <= 1440))
         && (!('todayKey' in d) || (d.todayKey is string && d.todayKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+        // その週（月曜〜日曜）の勉強時間（分）と日ごとの内訳、週の始まり（月曜の日付）
+        && (!('weekMinutes' in d) || (d.weekMinutes is int && d.weekMinutes >= 0 && d.weekMinutes <= 10080))
+        && (!('weekDays' in d) || (d.weekDays is list && d.weekDays.size() == 7
+          && d.weekDays[0] is int && d.weekDays[1] is int && d.weekDays[2] is int && d.weekDays[3] is int
+          && d.weekDays[4] is int && d.weekDays[5] is int && d.weekDays[6] is int))
+        && (!('weekKey' in d) || (d.weekKey is string && d.weekKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
         && d.updatedAt == request.time;
     }
 

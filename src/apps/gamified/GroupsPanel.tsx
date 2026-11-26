@@ -1,6 +1,7 @@
 // ゲーム版のグループ機能（フレンドタブの「グループ」の中身）
+// 参加しているグループ（開くと今日／今週のランキングと、グループ全体の今週のグラフ） → 作る・参加する の順
 import React, { useCallback, useEffect, useState } from 'react';
-import { BookOpen, ChevronDown, Crown, Flame, LogIn, LogOut, Pencil, Plus, RefreshCw, Trash2, UserMinus, UsersRound } from 'lucide-react';
+import { ChevronDown, LogIn, LogOut, Pencil, Plus, RefreshCw, Trash2, UserMinus, UsersRound } from 'lucide-react';
 import {
   createGroup,
   dissolveGroup,
@@ -19,8 +20,9 @@ import {
 } from '../../lib/groups';
 import type { PlayerProfile } from '../../lib/players';
 import { showConfirm, showPrompt } from '../../lib/dialog';
-import { CopyBox, todayMinutesOf } from './FriendsPanel';
+import { CopyBox } from './FriendsPanel';
 import { formatMinutes } from './gameStatsUtils';
+import { PeriodSwitch, RankingList, WeekBars, todayMinutesOf, weekDaysOf, weekMinutesOf, type Period } from './PlayerRanking';
 
 const inputClass =
   'flex-1 min-w-0 px-3 py-2 bg-[#312117] border border-[#fdd69f]/15 rounded-lg text-xs text-white focus:outline-none focus:border-[#fdd69f]/50';
@@ -28,7 +30,7 @@ const submitClass = 'shrink-0 flex items-center gap-1 px-3 py-2 rounded-lg bg-[#
 const subClass =
   'flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#fdd69f]/30 text-[#fdd69f] text-[11px] font-bold hover:bg-[#fdd69f]/10 disabled:opacity-40';
 
-export const GroupsPanel: React.FC<{ uid: string }> = ({ uid }) => {
+export const GroupsPanel: React.FC<{ uid: string; period: Period; onPeriodChange: (p: Period) => void }> = ({ uid, period, onPeriodChange }) => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [members, setMembers] = useState<Record<string, PlayerProfile[]>>({}); // 招待コードごと
   const [openCode, setOpenCode] = useState<string | null>(null);
@@ -37,12 +39,18 @@ export const GroupsPanel: React.FC<{ uid: string }> = ({ uid }) => {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+
+  // お知らせは少したったら消す
+  useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(() => setMessage(null), 6000);
+    return () => clearTimeout(t);
+  }, [message]);
 
   const loadMembers = useCallback(async (g: Group) => {
     try {
       const list = await fetchMembers(g);
-      // 今日たくさん勉強した人が上
-      list.sort((a, b) => todayMinutesOf(b) - todayMinutesOf(a));
       setMembers((m) => ({ ...m, [g.code]: list }));
     } catch (e) {
       console.error('メンバーの読み込みに失敗:', e);
@@ -56,7 +64,8 @@ export const GroupsPanel: React.FC<{ uid: string }> = ({ uid }) => {
       try {
         const list = await fetchMyGroups(uid);
         setGroups(list);
-        const target = list.find((g) => g.code === show);
+        // 指定がなければ、グループが1つだけのときはそれを開いておく
+        const target = list.find((g) => g.code === show) ?? (show === undefined && list.length === 1 ? list[0] : undefined);
         setOpenCode(target?.code ?? null);
         setMembers({});
         if (target) await loadMembers(target);
@@ -162,18 +171,8 @@ export const GroupsPanel: React.FC<{ uid: string }> = ({ uid }) => {
     });
   };
 
-  return (
-    <>
-      <form onSubmit={onCreate} className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2">
-        <p className="text-[11px] font-bold text-white/70">新しいグループを作る</p>
-        <div className="flex items-center gap-2">
-          <input value={name} maxLength={MAX_GROUP_NAME} onChange={(e) => setName(e.target.value)} placeholder="グループ名" autoComplete="off" className={inputClass} />
-          <button type="submit" disabled={busy || loading || !normalizeGroupName(name)} className={submitClass}>
-            <Plus size={14} /> 作る
-          </button>
-        </div>
-      </form>
-
+  const forms = (
+    <div className="space-y-3">
       <form onSubmit={onJoin} className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2">
         <p className="text-[11px] font-bold text-white/70">招待コードで参加する</p>
         <div className="flex items-center gap-2">
@@ -191,18 +190,33 @@ export const GroupsPanel: React.FC<{ uid: string }> = ({ uid }) => {
             <LogIn size={14} /> 参加
           </button>
         </div>
-        <p className="text-[10px] text-white/45">参加すると、名前・レベル・連続日数・今日の勉強時間がメンバーに見えます</p>
       </form>
+      <form onSubmit={onCreate} className="p-4 bg-[#1f140d] rounded-2xl border border-[#fdd69f]/15 space-y-2">
+        <p className="text-[11px] font-bold text-white/70">新しいグループを作る</p>
+        <div className="flex items-center gap-2">
+          <input value={name} maxLength={MAX_GROUP_NAME} onChange={(e) => setName(e.target.value)} placeholder="グループ名" autoComplete="off" className={inputClass} />
+          <button type="submit" disabled={busy || loading || !normalizeGroupName(name)} className={submitClass}>
+            <Plus size={14} /> 作る
+          </button>
+        </div>
+      </form>
+      <p className="text-[10px] text-white/45">参加すると、名前・レベル・連続日数・今日と今週の勉強時間がメンバーに見えます</p>
+    </div>
+  );
 
+  return (
+    <>
       {message && (
-        <p role="status" className={`text-[11px] ${message.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+        <p role="status" className={`px-3 py-2 rounded-xl text-[11px] font-bold ${message.ok ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'}`}>
           {message.text}
         </p>
       )}
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-[11px] font-bold text-white/70">参加しているグループ（{groups.length}個）</p>
+          <p className="text-[11px] font-bold text-white/70">
+            参加しているグループ（{groups.length} / {MAX_GROUPS}）
+          </p>
           <button
             onClick={() => {
               setMessage(null);
@@ -216,14 +230,21 @@ export const GroupsPanel: React.FC<{ uid: string }> = ({ uid }) => {
           </button>
         </div>
         {groups.length === 0 && (
-          <p className="text-xs text-white/45 py-3 text-center">{loading ? '読み込み中…' : 'グループにはまだ入っていません'}</p>
+          <div className="py-4 text-center space-y-2">
+            <UsersRound size={28} className="mx-auto text-[#fdd69f]/50" />
+            <p className="text-sm font-bold text-white">{loading ? '読み込み中…' : 'グループにはまだ入っていません'}</p>
+            {!loading && <p className="text-[11px] text-white/55">招待コードで参加するか、自分で作って仲間を誘いましょう</p>}
+          </div>
         )}
         {groups.map((g) => {
           const open = openCode === g.code;
           const list = members[g.code];
           const isOwner = g.owner === uid;
+          const weekTotal = list ? list.reduce((n, p) => n + weekMinutesOf(p), 0) : 0;
+          const todayTotal = list ? list.reduce((n, p) => n + todayMinutesOf(p), 0) : 0;
+          const weekSum = list ? [0, 1, 2, 3, 4, 5, 6].map((i) => list.reduce((n, p) => n + weekDaysOf(p)[i], 0)) : [];
           return (
-            <div key={g.code} className="rounded-2xl bg-[#1f140d] border border-[#fdd69f]/20">
+            <div key={g.code} className={`rounded-2xl bg-[#1f140d] border ${open ? 'border-[#fdd69f]/45' : 'border-[#fdd69f]/20'}`}>
               <button onClick={() => toggle(g)} aria-expanded={open} className="w-full flex items-center gap-3 p-3 text-left">
                 <span className="w-9 h-9 shrink-0 rounded-xl bg-[#fdd69f]/90 text-[#312117] flex items-center justify-center">
                   <UsersRound size={18} />
@@ -239,48 +260,55 @@ export const GroupsPanel: React.FC<{ uid: string }> = ({ uid }) => {
 
               {open && (
                 <div className="px-3 pb-3 space-y-3">
+                  {!list ? (
+                    <p className="text-xs text-white/45 py-2 text-center">読み込み中…</p>
+                  ) : (
+                    <>
+                      {/* グループ全体の今週 */}
+                      <div className="p-3 rounded-xl bg-[#312117] border border-[#fdd69f]/15 space-y-2">
+                        <div className="flex items-end justify-between gap-2">
+                          <div>
+                            <p className="text-[10px] font-bold text-white/60">グループの今週の合計</p>
+                            <p className="text-lg font-black text-[#fdd69f] tabular-nums leading-tight">{formatMinutes(weekTotal)}</p>
+                          </div>
+                          <p className="text-[10px] text-white/60 text-right">
+                            今日 <span className="font-bold text-white">{formatMinutes(todayTotal)}</span>
+                            <br />1人平均 {formatMinutes(list.length ? weekTotal / list.length : 0)}
+                          </p>
+                        </div>
+                        <WeekBars days={weekSum} height={48} showValues />
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-bold text-white/70">メンバーのランキング</p>
+                          <PeriodSwitch value={period} onChange={onPeriodChange} />
+                        </div>
+                        <RankingList
+                          players={list}
+                          period={period}
+                          myUid={uid}
+                          ownerUid={g.owner}
+                          actions={(p) =>
+                            isOwner && p.uid !== uid ? (
+                              <button
+                                onClick={() => void onKick(g, p)}
+                                disabled={busy}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-400/30 text-red-200 text-[11px] font-bold hover:bg-red-900/30 disabled:opacity-40"
+                              >
+                                <UserMinus size={12} /> グループから外す
+                              </button>
+                            ) : null
+                          }
+                        />
+                      </div>
+                    </>
+                  )}
+
                   <div className="space-y-1">
                     <p className="text-[11px] font-bold text-white/70">招待コード（仲間に教えてください）</p>
                     <CopyBox text={g.code} />
                   </div>
-
-                  {!list ? (
-                    <p className="text-xs text-white/45 py-2 text-center">読み込み中…</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <p className="text-[11px] font-bold text-white/70">
-                        今日の合計 <span className="text-[#fdd69f]">{formatMinutes(list.reduce((n, p) => n + todayMinutesOf(p), 0))}</span>（長い順）
-                      </p>
-                      {list.map((p, i) => (
-                        <div key={p.uid} className={`flex items-center gap-2 p-2 rounded-xl border ${p.uid === uid ? 'bg-[#fdd69f]/10 border-[#fdd69f]/50' : 'bg-[#4a3424]/30 border-[#fdd69f]/15'}`}>
-                          <span className="w-5 shrink-0 text-center text-xs font-black text-[#fdd69f]">{i + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-white flex items-center gap-1">
-                              <span className="truncate">{p.name}</span>
-                              {p.uid === g.owner && <Crown size={12} className="shrink-0 text-[#fdd69f]" aria-label="リーダー" />}
-                              {p.uid === uid && <span className="shrink-0 text-[10px] text-[#fdd69f]">あなた</span>}
-                            </p>
-                            <p className="text-[10px] text-[#fdd69f]/80 truncate">
-                              Lv.{p.level} {p.title}
-                            </p>
-                          </div>
-                          <div className="shrink-0 flex flex-col items-end">
-                            <span className={`flex items-center gap-1 text-[11px] font-bold ${todayMinutesOf(p) > 0 ? 'text-white' : 'text-white/40'}`} title="今日の勉強時間">
-                              <BookOpen size={11} className="text-[#fdd69f]" /> {formatMinutes(todayMinutesOf(p))}
-                            </span>
-                            <span className="flex items-center gap-0.5 text-[10px] font-bold text-[#fdd69f]" title="連続日数">
-                              <Flame size={11} /> {p.streakDays}日
-                            </span>
-                          </div>
-                          {isOwner && p.uid !== uid && (
-                            <button onClick={() => void onKick(g, p)} disabled={busy} className="shrink-0 p-1.5 text-white/40 hover:text-red-400" aria-label={`${p.name} さんを外す`}>
-                              <UserMinus size={15} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
 
                   <div className="flex flex-wrap gap-2">
                     {isOwner && (
@@ -307,6 +335,23 @@ export const GroupsPanel: React.FC<{ uid: string }> = ({ uid }) => {
           );
         })}
       </div>
+
+      {/* 作る・参加する（グループがないときは開いておく） */}
+      {groups.length === 0 && !loading ? (
+        forms
+      ) : (
+        <div className="space-y-2">
+          <button
+            onClick={() => setFormOpen((o) => !o)}
+            aria-expanded={formOpen}
+            className="w-full flex items-center justify-center gap-1.5 py-3 rounded-2xl border border-[#fdd69f]/30 text-[#fdd69f] text-xs font-bold hover:bg-[#fdd69f]/10 transition"
+          >
+            <Plus size={15} /> グループを作る・参加する
+            <ChevronDown size={14} className={`transition ${formOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {formOpen && forms}
+        </div>
+      )}
     </>
   );
 };

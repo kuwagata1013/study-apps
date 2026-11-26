@@ -92,7 +92,7 @@ export const moveAccountData = async (fromUid: string, toUid: string | null) => 
   const batch = writeBatch(db);
   if (toUid && player && name) {
     const copy: Record<string, unknown> = { name, updatedAt: serverTimestamp() };
-    for (const k of ['level', 'title', 'streakDays', 'todayMinutes', 'todayKey']) if (k in player) copy[k] = player[k];
+    for (const k of ['level', 'title', 'streakDays', 'todayMinutes', 'todayKey', 'weekMinutes', 'weekDays', 'weekKey']) if (k in player) copy[k] = player[k];
     batch.set(doc(db, 'players', toUid), copy);
     if (nameRef && ownsName) batch.set(nameRef, { uid: toUid, name, updatedAt: serverTimestamp() });
     for (const f of friendIds) {

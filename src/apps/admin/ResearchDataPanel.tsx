@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { studyDayKey } from '../../lib/studyDay';
 import {
   Activity, Check, Database, Download, FileSpreadsheet, Flag, FolderPlus, ListChecks, MousePointerClick, Music, Pencil, Power,
   RefreshCw, RotateCcw, Timer, Users, Clock, X
@@ -387,7 +388,7 @@ export const ResearchDataPanel: React.FC = () => {
       const row = rowOf(e);
       if (e.type === 'app_launch' && e.at) {
         if (!launchDays.has(e.participantKey)) launchDays.set(e.participantKey, new Set());
-        launchDays.get(e.participantKey)!.add(dateKey(e.at));
+        launchDays.get(e.participantKey)!.add(studyDayKey(e.at));
         const r = launchRange.get(e.participantKey);
         if (!r) launchRange.set(e.participantKey, { first: e.at, last: e.at });
         else {
@@ -505,7 +506,7 @@ export const ResearchDataPanel: React.FC = () => {
           label: list[0].participantLabel,
           hasParticipantId: list[0].hasParticipantId,
           modes: [...new Set(list.map((l) => l.mode))],
-          studyDays: new Set(list.map((l) => (l.endedAt ? dateKey(l.endedAt) : ''))).size,
+          studyDays: new Set(list.map((l) => (l.endedAt ? studyDayKey(l.endedAt) : ''))).size,
           first: times.length ? new Date(Math.min(...times)) : null,
           last: times.length ? new Date(Math.max(...times)) : null,
           ...statsOf(list)

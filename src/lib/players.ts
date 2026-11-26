@@ -1,5 +1,5 @@
 // プレイヤー名とフレンド機能
-// - players/{uid}: 公開プロフィール（名前・レベル・称号・連続日数）。アカウントIDを知っている人だけが読める
+// - players/{uid}: 公開プロフィール（名前・レベル・称号・連続日数・今日と今週の勉強時間）。アカウントIDを知っている人だけが読める
 // - playerNames/{名前のキー}: 名前 → アカウントID。名前は1人1つの早い者勝ち。名前を知っている人だけが引ける
 // - players/{uid}/friends/{相手のuid}: 自分のフレンド一覧（読めるのは本人だけ）
 // - friendRequests/{申請した人のuid}_{相手のuid}: フレンド申請。相手が承認するとお互いの一覧に入る
@@ -18,6 +18,9 @@ export interface PlayerProfile {
   streakDays: number;
   todayMinutes: number; // その日の勉強時間（分）
   todayKey: string; // todayMinutes の日付（YYYY-MM-DD）。今日と違えば 0 分として扱う
+  weekMinutes: number; // その週（月曜〜日曜）の勉強時間（分）
+  weekDays: number[]; // その週の日ごとの勉強時間（分）。月曜から日曜の7つ
+  weekKey: string; // その週の月曜の日付（YYYY-MM-DD）。今週と違えば 0 分として扱う
 }
 
 export const normalizeName = (name: string) => name.replace(/\s+/g, ' ').trim().slice(0, MAX_NAME_LENGTH);
@@ -109,8 +112,9 @@ export const claimPlayerName = async (uid: string, rawName: string, oldName?: st
 // 自分の公開プロフィールのうち、レベル・称号・連続日数を更新する（名前は claimPlayerName で変える）
 export const savePlayerStats = async (
   uid: string,
-  s: { level: number; title: string; streakDays: number; todayMinutes: number; todayKey: string }
+  s: { level: number; title: string; streakDays: number; todayMinutes: number; todayKey: string; weekDays: number[]; weekKey: string }
 ) => {
+  const days = Array.from({ length: 7 }, (_, i) => Math.max(0, Math.min(1440, Math.round(s.weekDays[i] ?? 0))));
   await setDoc(
     doc(db, 'players', uid),
     {
@@ -119,6 +123,9 @@ export const savePlayerStats = async (
       streakDays: Math.max(0, Math.floor(s.streakDays)),
       todayMinutes: Math.max(0, Math.min(1440, Math.round(s.todayMinutes))),
       todayKey: s.todayKey,
+      weekMinutes: days.reduce((a, b) => a + b, 0),
+      weekDays: days,
+      weekKey: s.weekKey,
       updatedAt: serverTimestamp()
     },
     { merge: true }
@@ -136,7 +143,10 @@ export const fetchPlayer = async (uid: string): Promise<PlayerProfile | null> =>
     title: d.title ?? '',
     streakDays: d.streakDays ?? 0,
     todayMinutes: d.todayMinutes ?? 0,
-    todayKey: d.todayKey ?? ''
+    todayKey: d.todayKey ?? '',
+    weekMinutes: d.weekMinutes ?? 0,
+    weekDays: Array.isArray(d.weekDays) && d.weekDays.length === 7 ? d.weekDays.map((n) => (typeof n === 'number' ? n : 0)) : [0, 0, 0, 0, 0, 0, 0],
+    weekKey: d.weekKey ?? ''
   };
 };
 

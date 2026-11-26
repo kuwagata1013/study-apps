@@ -41,7 +41,9 @@ import {
   FOCUS_BONUS_EXP,
   FOCUS_BONUS_SECONDS,
   dayKey,
-  logTime,
+  logDay,
+  studyNow,
+  thisWeekDays,
   missedDays,
   streakBonusRate,
   streakUntilYesterday,
@@ -327,7 +329,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     }
 
     // --- デイリーログインチェック ---
-    const todayStr = new Date().toLocaleDateString('ja-JP');
+    const todayStr = studyNow().toLocaleDateString('ja-JP');
     const lastLoginDate = localStorage.getItem('gamified_last_login_date');
 
     // デイリークエストのクリア記録。以前の版で自分で作ってクリアしたクエストは、記録として引き継ぐ
@@ -357,7 +359,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
 
     // --- ライフクリスタルで連続記録を守る（1日1回だけ確認） ---
-    const todayKey = dayKey(new Date());
+    const todayKey = dayKey(studyNow());
     if (localStorage.getItem('gamified_streak_check_day') !== todayKey) {
       localStorage.setItem('gamified_streak_check_day', todayKey);
       const missed = missedDays(loadedLogs, loadedProtected);
@@ -534,7 +536,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   // デイリークエストの達成判定（記録したときに呼ぶ）。この記録で新しく達成したクエストを返す
   // EXP はクエストタブの「受け取る」で渡す
   const judgeDailyQuests = (beforeLogs: StudyLog[], afterLogs: StudyLog[]) => {
-    const now = new Date();
+    const now = studyNow();
     const newly = questsFor(now).filter((q) => !isQuestDone(q, beforeLogs, now) && isQuestDone(q, afterLogs, now));
     newly.forEach((q) => trackEvent('quest_complete', { label: q.title, count: q.exp }));
     return newly;
@@ -545,7 +547,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
 
   // 報酬を受け取る。questIds のクエストと、bonus が true ならクリアボーナスも（まとめて受け取るにも使う）
   const claimRewards = (questIds: string[], bonus: boolean, from?: HTMLElement | null) => {
-    const now = new Date();
+    const now = studyNow();
     const key = dayKey(now);
     const quests = questsFor(now);
     const claimable = quests.filter(
@@ -624,7 +626,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
     // ライフクリスタル：宝箱と、連続7日ごとのごほうび
     let crystalsGained = chestCrystal ? 1 : 0;
     const streakNow = studyStreak(updatedLogs, protectedDays);
-    const todayKey = dayKey(new Date());
+    const todayKey = dayKey(studyNow());
     const streakReward =
       streakNow > 0 &&
       streakNow % CRYSTAL_STREAK_STEP === 0 &&
@@ -682,10 +684,10 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   };
 
   // 今日のデイリークエストと、クリアの状況
-  const todayQuests = questsFor(new Date());
+  const todayQuests = questsFor(studyNow());
   const claimedToday = new Set(questClears.filter((c) => todayQuests.some((q) => q.id === c.id)).map((c) => c.id));
-  const doneToday = new Set(todayQuests.filter((q) => isQuestDone(q, logs, new Date())).map((q) => q.id));
-  const bonusClaimed = allClearDays.includes(dayKey(new Date()));
+  const doneToday = new Set(todayQuests.filter((q) => isQuestDone(q, logs, studyNow())).map((q) => q.id));
+  const bonusClaimed = allClearDays.includes(dayKey(studyNow()));
   const bonusReady = doneToday.size === todayQuests.length && !bonusClaimed;
   const claimableIds = todayQuests.filter((q) => doneToday.has(q.id) && !claimedToday.has(q.id)).map((q) => q.id);
   const claimableExp =
@@ -715,9 +717,9 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   const streakDays = studyStreak(logs, protectedDays);
 
   // 今日の勉強時間（分）。フレンドに見せる
-  const todayStudyKey = dayKey(new Date());
+  const todayStudyKey = dayKey(studyNow());
   const todayMinutes = logs
-    .filter((l) => dayKey(logTime(l)) === todayStudyKey)
+    .filter((l) => dayKey(logDay(l)) === todayStudyKey)
     .reduce((sum, l) => sum + l.durationMinutes, 0);
 
   // プレイヤー名（ログイン後に決めた名前。Google アカウントの名前は使わない）
@@ -729,12 +731,23 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
   useEffect(() => {
     if (!uid || !playerName) return;
     const t = setTimeout(() => {
-      savePlayerStats(uid, { level, title: levelTitle(level), streakDays, todayMinutes, todayKey: dayKey(new Date()) }).catch((e) =>
+      const week = thisWeekDays(logs);
+      savePlayerStats(uid, {
+        level,
+        title: levelTitle(level),
+        streakDays,
+        todayMinutes,
+        todayKey: dayKey(studyNow()),
+        weekDays: week.days,
+        weekKey: week.weekKey
+      }).catch((e) =>
         console.error('プロフィールの保存に失敗:', e)
       );
     }, 1500);
     return () => clearTimeout(t);
-  }, [uid, playerName, level, streakDays, todayMinutes]);
+    // logs は記録したときに変わる（今日の分が変わらない昔の記録の追加でも、今週の分を書き直す）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, playerName, level, streakDays, todayMinutes, logs.length]);
 
   const hasFriendRequests = !!uid && friendRequestCount > 0;
   // 届いているフレンド申請の数（開いたときに一度だけ確かめる。フレンドタブを開くと最新になる）
@@ -1057,7 +1070,7 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                         const done = doneToday.has(q.id);
                         const claimed = claimedToday.has(q.id);
                         const target = questTarget(q);
-                        const progress = Math.min(target, questProgress(q, logs, new Date()));
+                        const progress = Math.min(target, questProgress(q, logs, studyNow()));
                         return (
                           <QuestRow
                             key={q.id}

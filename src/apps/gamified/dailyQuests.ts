@@ -1,7 +1,7 @@
 // ゲーム版のデイリークエスト
 // - 管理画面で決めた候補（settings/quests）から、毎日決まった数を全員に同じように出す（日付から決める）
 // - 記録したときに、その日の記録から自動で判定する
-import { dayKey, logTime } from './gameStatsUtils';
+import { dayKey, logDay } from './gameStatsUtils';
 import { getQuestConfig, QUEST_SUBJECTS, type QuestConfig, type QuestKind, type QuestTemplate } from '../../lib/questConfig';
 
 export interface DailyQuest {
@@ -90,7 +90,7 @@ const minutesOf = (l: QuestLog) => (l.durationSeconds ?? l.durationMinutes * 60)
 // 今の進み具合（クエストの単位で）
 export const questProgress = (q: DailyQuest, logs: QuestLog[], date: Date): number => {
   const key = dayKey(date);
-  const today = logs.filter((l) => dayKey(logTime(l)) === key);
+  const today = logs.filter((l) => dayKey(logDay(l)) === key);
   switch (q.kind) {
     case 'subject':
       return Math.floor(today.filter((l) => l.subject === q.subject).reduce((s, l) => s + minutesOf(l), 0));

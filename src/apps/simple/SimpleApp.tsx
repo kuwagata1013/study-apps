@@ -30,6 +30,7 @@ import TimerFinishDialog from '../../components/TimerFinishDialog';
 import ContactForm from '../../components/ContactForm';
 import AlarmSettings from '../../components/AlarmSettings';
 import { startTicker } from '../../lib/ticker';
+import { studyDayKey, studyNow } from '../../lib/studyDay';
 import { fireAlarm, prepareAlarm, useKeepAwake } from '../../lib/timerAlarm';
 import { signOut } from 'firebase/auth';
 import { showAlert } from '../../lib/dialog';
@@ -60,6 +61,15 @@ const SIMPLE_BGM: { id: SimpleBgm; name: string; desc: string; icon: React.React
   { id: 'waves', name: '波の音', desc: '寄せては返す波でリラックス', icon: <Waves size={18} /> },
   { id: 'cafe', name: 'カフェ', desc: 'ほどよいざわめきで集中', icon: <Coffee size={18} /> }
 ];
+
+// 記録が属する学習日（午前4時で日付が変わる）。保存した時刻（ID）から求める。
+// 以前の記録の dateKey は世界標準時の日付だったので、時刻がわかるときはそちらを使う
+const logDayKey = (l: { id: string; dateKey?: string; createdAt: string }) => {
+  const t = Number(l.id);
+  if (Number.isFinite(t) && t > 1e12) return studyDayKey(t);
+  const parsed = new Date(l.createdAt.replace(/\//g, '-'));
+  return Number.isNaN(parsed.getTime()) ? l.dateKey ?? '' : studyDayKey(parsed);
+};
 
 export const SimpleApp: React.FC<SimpleAppProps> = ({ 
   user, 
@@ -99,9 +109,9 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
 
   // 5. カレンダー・統計操作ステート
   const [statsPeriod, setStatsPeriod] = useState<'day' | 'week' | 'month'>('week');
-  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(studyNow);
   const [selectedCalendarDateStr, setSelectedCalendarDateStr] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    () => studyDayKey()
   );
 
   // 7. 管理者認証モーダルステート
@@ -224,7 +234,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     // 教科は6つから選ぶだけ（「その他」も入力はしない。ゲーム版と同じ条件）
     const finalSubject = subject;
     const now = new Date();
-    const dateKey = now.toISOString().split('T')[0];
+    const dateKey = studyDayKey(now); // 午前4時で日付が変わる
     
     const newLog: StudyLog = {
       id: Date.now().toString(),
@@ -296,7 +306,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const nextMonth = () => setCurrentCalendarDate(new Date(year, month + 1, 1));
 
   // 選択日のログおよび合計時間計算
-  const logsOnSelectedDate = logs.filter(l => (l.dateKey || l.createdAt.split(' ')[0].replace(/\//g, '-')) === selectedCalendarDateStr);
+  const logsOnSelectedDate = logs.filter(l => logDayKey(l) === selectedCalendarDateStr);
   const totalSecondsOnSelectedDate = logsOnSelectedDate.reduce((acc, log) => {
     const secs = log.durationSeconds ?? ((log.durationMinutes || 0) * 60);
     return acc + (isNaN(secs) ? 0 : secs);
@@ -473,7 +483,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                   const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${dayNum.toString().padStart(2, '0')}`;
                   const isSelected = dateStr === selectedCalendarDateStr;
 
-                  const hasLog = logs.some(l => (l.dateKey || l.createdAt.split(' ')[0].replace(/\//g, '-')) === dateStr);
+                  const hasLog = logs.some(l => logDayKey(l) === dateStr);
 
                   return (
                     <button

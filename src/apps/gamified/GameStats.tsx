@@ -13,7 +13,9 @@ import {
   dayKey,
   formatMinutes,
   levelTitle,
+  logDay,
   logTime,
+  studyNow,
   pad,
   studyStreak,
   type StatsLog
@@ -60,7 +62,7 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
   const [historyDays, setHistoryDays] = useState(HISTORY_STEP);
 
   const stats = useMemo(() => {
-    const now = new Date();
+    const now = studyNow(); // 午前4時で日付が変わる
     const today = dayKey(now);
     // 今週 = 直近 7 日（今日を含む）
     const weekStart = new Date(now);
@@ -75,7 +77,7 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
     const bySubject = new Map<string, number>();
 
     logs.forEach((l) => {
-      const t = logTime(l);
+      const t = logDay(l);
       const key = dayKey(t);
       totalMin += l.durationMinutes;
       totalExp += l.expGained;
@@ -104,7 +106,7 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
     const history = [...byDay.entries()]
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
       .map(([key, list]) => {
-        const d = logTime(list[0]);
+        const d = logDay(list[0]);
         return {
           key,
           title: key === today ? '今日' : `${d.getMonth() + 1}月${d.getDate()}日（${WEEKDAYS[d.getDay()]}）`,
