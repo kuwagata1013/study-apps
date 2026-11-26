@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   onAuthStateChanged, 
   signOut, 
@@ -134,6 +134,42 @@ export const App: React.FC = () => {
       stop?.();
     };
   }, [uid]);
+
+  // ゲーム版を開いたままにしておいて戻ってきたとき（スマホでほかのアプリから戻ったときなど）：
+  // - アプリが新しくなっていたら読み直す（古い版のまま使い続けないように）
+  // - ほかの端末で記録が増えていたら読み直す。開いている画面は自分の端末の記録しか知らないため、
+  //   そのままだとフレンド・グループに見せる今日・今週の勉強時間が少なく保存されてしまう
+  // 計測中のタイマーは端末に残しているので、読み直しても続きから再開する
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  useEffect(() => {
+    if (!uid || syncedUid !== uid) return;
+    let hiddenAt = 0;
+    let checking = false;
+    const isNewVersion = async () => {
+      if (!import.meta.env.PROD || import.meta.env.MODE === 'offline') return false;
+      const current = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/"]')?.getAttribute('src');
+      if (!current) return false;
+      const html = await fetch('/index.html', { cache: 'no-store' }).then((r) => (r.ok ? r.text() : ''));
+      const latest = html.match(/<script[^>]*type="module"[^>]*src="([^"]+)"/)?.[1];
+      return !!latest && latest !== current;
+    };
+    const onVisible = async () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (modeRef.current !== 'gamified' || checking || !hiddenAt || Date.now() - hiddenAt < 30_000) return;
+      checking = true;
+      try {
+        if ((await isNewVersion().catch(() => false)) || (await pullProgress(uid))) window.location.reload();
+      } finally {
+        checking = false;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [uid, syncedUid]);
 
   // 名前を変える（使われている名前ならエラー文を返す）
   const renamePlayer = async (name: string): Promise<string | null> => {

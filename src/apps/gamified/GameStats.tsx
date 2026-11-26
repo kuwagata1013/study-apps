@@ -16,6 +16,7 @@ import {
   logDay,
   logTime,
   studyNow,
+  thisWeekDays,
   pad,
   studyStreak,
   type StatsLog
@@ -201,7 +202,7 @@ export const GameStats: React.FC<GameStatsProps> = ({ level, exp, maxExp, lifeTo
       {/* 主な数字 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Tile icon={<Clock size={12} />} label="今日の学習" value={formatMinutes(stats.todayMin)} accent="text-emerald-400" />
-        <Tile icon={<Calendar size={12} />} label="直近7日" value={formatMinutes(stats.weekMin)} accent="text-sky-400" />
+        <Tile icon={<Calendar size={12} />} label="今週（月曜から）" value={formatMinutes(thisWeekDays(logs).days.reduce((a, b) => a + b, 0))} accent="text-sky-400" />
         <Tile
           icon={<Flame size={12} />}
           label="連続学習"

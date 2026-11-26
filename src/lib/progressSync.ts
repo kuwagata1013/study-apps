@@ -144,7 +144,8 @@ const withTimeout = <T,>(p: Promise<T>, ms: number) =>
 
 // ===== アプリを開いたとき（画面を出す前に1回） =====
 // サーバーの記録と端末の記録を合わせて、端末に書く。通信できなければ端末の記録のまま続ける
-export const pullProgress = async (uid: string) => {
+// 戻り値：端末の記録が変わったか（ほかの端末で増えた分が入ったなど）
+export const pullProgress = async (uid: string): Promise<boolean> => {
   const dataset = getLocalDataset();
   const meta = readMeta();
   const local = readLocal();
@@ -164,8 +165,10 @@ export const pullProgress = async (uid: string) => {
     const savedAt = remote && mergedHash === hashOf(remote.data) ? remote.savedAt : Math.max(changedAt, remote?.savedAt ?? 0);
     if (!remote || mergedHash !== hashOf(remote.data)) await saveRemote(uid, dataset, merged, savedAt);
     writeMeta({ uid, dataset, hash: mergedHash, changedAt: savedAt });
+    return mergedHash !== localHash;
   } catch (e) {
     console.warn('記録をサーバーと合わせられませんでした（この端末の記録で続けます）:', e);
+    return false;
   }
 };
 

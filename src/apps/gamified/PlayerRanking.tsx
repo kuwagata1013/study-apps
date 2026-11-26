@@ -100,6 +100,11 @@ export const RankingList: React.FC<{
                   <span className="truncate">{p.name}</span>
                   {p.uid === ownerUid && <Crown size={12} className="shrink-0 text-[#fdd69f]" aria-label="リーダー" />}
                   {me && <span className="shrink-0 px-1.5 rounded bg-[#fdd69f] text-[#312117] text-[9px] leading-4">あなた</span>}
+                  {!p.weekKey && (
+                    <span className="shrink-0 text-[9px] font-normal text-white/40" title="新しい版のアプリをまだ開いていないため、今週の時間が届いていません">
+                      未更新
+                    </span>
+                  )}
                 </span>
                 <span className="block h-1.5 rounded-full bg-white/10 overflow-hidden">
                   <span className="block h-full rounded-full bg-gradient-to-r from-[#b98a5a] to-[#fdd69f]" style={{ width: `${(min / top) * 100}%` }} />
