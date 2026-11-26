@@ -58,29 +58,26 @@ export const toSvgUrl = ({ height, rects }: Layer, tint?: { color: string; amoun
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 };
 
-// 動く背景用：同じ絵を、ドット1つ＝1px の小さな PNG にする（表示するときに CSS で拡大する）。
-// SVG のまま横に流すと、iPhone（Safari）は大きな画像を描き直す途中で、
-// 一瞬ちがう絵（描きかけ）を見せることがあるため。作れないときは SVG を使う
-export const toPngUrl = (layer: Layer, tint?: { color: string; amount: number }) => {
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = TILE;
-    canvas.height = layer.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return toSvgUrl(layer, tint);
-    const tinted = new Map<string, string>();
-    for (const r of wrapRects(layer.rects)) {
+// 動く背景用：絵をキャンバスに、ドット1つ＝1px でタイルを横に tiles 枚並べて描く（表示するときに CSS で拡大する）。
+// 背景画像（background-image）のまま横に流すと、iPhone（Safari）は画面に入ってくる部分を
+// あとから描くため、間に合わないと一瞬景色が消える。キャンバスなら最初に全部描いておける
+export const paintLayer = (canvas: HTMLCanvasElement, layer: Layer, tint: { color: string; amount: number } | undefined, tiles: number) => {
+  canvas.width = TILE * tiles;
+  canvas.height = layer.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const tinted = new Map<string, string>();
+  const rects = wrapRects(layer.rects);
+  for (let t = 0; t < tiles; t++) {
+    for (const r of rects) {
       let c = r.c;
       if (tint) {
         if (!tinted.has(c)) tinted.set(c, mix(c, tint.color, tint.amount));
         c = tinted.get(c)!;
       }
       ctx.fillStyle = c;
-      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.fillRect(r.x + t * TILE, r.y, r.w, r.h);
     }
-    return `url("${canvas.toDataURL('image/png')}")`;
-  } catch {
-    return toSvgUrl(layer, tint);
   }
 };
 

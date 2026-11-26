@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { mix, sceneColors, type Scene } from './sceneTime';
-import { PX, TILE, createRandom, layersOf, toPngUrl, type Scenery } from './scenery';
+import { PX, TILE, createRandom, layersOf, paintLayer, type Layer, type Scenery } from './scenery';
 import './ForestBackground.css';
 
 // キャラクター（ドット絵）に合わせた、ドット絵風の動く背景（景色の絵は scenery.ts）。
@@ -54,6 +54,33 @@ const LEAVES = Array.from({ length: 5 }, (_, i) => {
   };
 });
 
+// 横に流れる1枚のレイヤー（遠景・中景・近景）。タイル1枚分だけ動かしてループする
+const TILE_PX = TILE * PX;
+// どんな画面幅でもすき間が出ないよう、画面幅＋タイル1枚分以上を並べておく
+const tileCount = () => Math.ceil(Math.max(window.innerWidth, window.screen?.width ?? 0, 1920) / TILE_PX) + 1;
+const LayerCanvas: React.FC<{ art: Layer; tint?: { color: string; amount: number }; speed: number; bottom: number }> = ({ art, tint, speed, bottom }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const tiles = useMemo(tileCount, []);
+  useEffect(() => {
+    if (ref.current) paintLayer(ref.current, art, tint, tiles);
+  }, [art, tint, tiles]);
+  return (
+    <canvas
+      ref={ref}
+      className="forest-layer"
+      style={
+        {
+          bottom: bottom * PX,
+          width: TILE_PX * tiles,
+          height: art.height * PX,
+          '--tile': `${TILE_PX}px`,
+          animationDuration: `${TILE_PX / speed}s`
+        } as React.CSSProperties
+      }
+    />
+  );
+};
+
 interface ForestBackgroundProps {
   // true のときキャラクターが歩いている扱いで景色が流れる
   moving: boolean;
@@ -67,9 +94,9 @@ export const ForestBackground: React.FC<ForestBackgroundProps> = ({ moving, scen
   const art = layersOf(scenery);
   const layers = useMemo(
     () => [
-      { key: 'far', height: art.far.height, url: toPngUrl(art.far, colors.far), speed: 8, bottom: 22 },
-      { key: 'mid', height: art.mid.height, url: toPngUrl(art.mid, colors.mid), speed: 22, bottom: 14 },
-      { key: 'near', height: art.near.height, url: toPngUrl(art.near, colors.near), speed: 60, bottom: 0 }
+      { key: 'far', height: art.far.height, art: art.far, tint: colors.far, speed: 8, bottom: 22 },
+      { key: 'mid', height: art.mid.height, art: art.mid, tint: colors.mid, speed: 22, bottom: 14 },
+      { key: 'near', height: art.near.height, art: art.near, tint: colors.near, speed: 60, bottom: 0 }
     ],
     [colors, art]
   );
@@ -116,26 +143,9 @@ export const ForestBackground: React.FC<ForestBackgroundProps> = ({ moving, scen
         ))}
       </div>
 
-      {layers.map((layer) => {
-        const tileWidth = TILE * PX;
-        return (
-          <div
-            key={layer.key}
-            className="forest-layer"
-            style={
-              {
-                bottom: layer.bottom * PX,
-                height: layer.height * PX,
-                width: `calc(100% + ${tileWidth}px)`,
-                backgroundImage: layer.url,
-                backgroundSize: `${tileWidth}px ${layer.height * PX}px`,
-                '--tile': `${tileWidth}px`,
-                animationDuration: `${tileWidth / layer.speed}s`
-              } as React.CSSProperties
-            }
-          />
-        );
-      })}
+      {layers.map((layer) => (
+        <LayerCanvas key={layer.key} art={layer.art} tint={layer.tint} speed={layer.speed} bottom={layer.bottom} />
+      ))}
 
       <div className={`forest-particles is-${phase}`}>
         {dry && PARTICLES.map((p, i) => (
