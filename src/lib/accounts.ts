@@ -6,6 +6,7 @@ import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where
 import { db } from '../firebase';
 import { isValidParticipantId } from './participant';
 import { nameKey } from './players';
+import { moveProgress } from './progressSync';
 
 // この端末の参加者IDが、どのアカウントから来たものか（ログアウトしたら消すため）
 const OWNER_KEY = 'participant_id_owner';
@@ -70,7 +71,7 @@ export const adminSetParticipantId = async (uid: string, participantId: string) 
   await setDoc(doc(db, 'accounts', uid), { participantId, updatedAt: serverTimestamp() }, { merge: true });
 };
 
-// 管理者用：アカウントのプレイヤー名・フレンド・グループを別のアカウントへ移す（toUid が null なら消すだけ）
+// 管理者用：アカウントのプレイヤー名・フレンド・グループ・学習の記録を別のアカウントへ移す（toUid が null なら消すだけ）
 // パスワードの再発行（新しいログインに引き継ぐ）とアカウントの削除で使う。研究データ（ログ）は参加者IDで集計するので触らない
 export const moveAccountData = async (fromUid: string, toUid: string | null) => {
   const playerRef = doc(db, 'players', fromUid);
@@ -119,4 +120,6 @@ export const moveAccountData = async (fromUid: string, toUid: string | null) => 
   if (player) batch.delete(playerRef);
   batch.delete(doc(db, 'accounts', fromUid));
   await batch.commit();
+  // 学習の記録（レベル・学習ログなど）
+  await moveProgress(fromUid, toUid);
 };

@@ -25,6 +25,7 @@ import StartApp from './apps/start/StartApp';
 import GamifiedApp from './apps/gamified/GamifiedApp';
 import SimpleApp from './apps/simple/SimpleApp';
 import AdminApp from './apps/admin/AdminApp';
+import { pullProgress, startProgressSync } from './lib/progressSync';
 import NameSetup from './apps/start/NameSetup';
 import { claimPlayerName, getCachedName, loadMyName } from './lib/players';
 import { setDialogTheme } from './lib/dialog';
@@ -111,6 +112,26 @@ export const App: React.FC = () => {
       });
     return () => {
       cancelled = true;
+    };
+  }, [uid]);
+
+  // 学習の記録をアカウントのものと合わせる（別の端末で記録した分も使えるように）。合わせ終わるまで記録の画面は出さない
+  const [syncedUid, setSyncedUid] = useState<string | null>(null);
+  useEffect(() => {
+    if (!uid) {
+      setSyncedUid(null);
+      return;
+    }
+    let cancelled = false;
+    let stop: (() => void) | undefined;
+    pullProgress(uid).finally(() => {
+      if (cancelled) return;
+      setSyncedUid(uid);
+      stop = startProgressSync(uid);
+    });
+    return () => {
+      cancelled = true;
+      stop?.();
     };
   }, [uid]);
 
@@ -279,7 +300,7 @@ export const App: React.FC = () => {
   // ログインしていて名前がまだなら、先に名前を決めてもらう
   // （スタート画面では「プレイヤー名」のステップで決める。管理者画面は除く）
   const needsNameScreen = user && mode !== 'admin' && mode !== 'start';
-  if (needsNameScreen && nameStatus === 'checking') {
+  if ((needsNameScreen && nameStatus === 'checking') || ((mode === 'simple' || mode === 'gamified') && (!authReady || (uid && syncedUid !== uid)))) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center text-xs text-gray-400">
         読み込み中...

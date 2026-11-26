@@ -310,6 +310,26 @@ service cloud.firestore {
             && before.members.hasAll(after.members)));
     }
 
+    // 学習の記録（ドキュメントIDは「アカウントID_データ番号」）。別の端末でも同じ記録を使うため。読み書きできるのは本人だけ
+    // data は端末に保存しているゲーム版・シンプル版の値（キー → 文字列）。研究データの集計には使わない
+    // 管理者はパスワードの再発行（新しいアカウントへの引き継ぎ）とアカウントの削除のときに読み書きする
+    match /progress/{id} {
+      allow get: if request.auth != null && (id.matches(request.auth.uid + '_[0-9]+') || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if request.auth != null
+        && (request.resource.data.uid == request.auth.uid || isAdmin())
+        && id == request.resource.data.uid + '_' + string(request.resource.data.dataset)
+        && request.resource.data.keys().hasOnly(['uid', 'dataset', 'data', 'rev', 'savedAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['uid', 'dataset', 'data', 'rev', 'savedAt', 'updatedAt'])
+        && request.resource.data.uid is string
+        && request.resource.data.dataset is int && request.resource.data.dataset >= 1 && request.resource.data.dataset <= 1000
+        && request.resource.data.data is map && request.resource.data.data.size() <= 100
+        && request.resource.data.rev is string && request.resource.data.rev.size() <= 40
+        && request.resource.data.savedAt is int
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isAdmin();
+    }
+
     // それ以外はすべて拒否
     match /{document=**} {
       allow read, write: if false;
