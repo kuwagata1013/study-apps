@@ -48,7 +48,7 @@
 }
 .forest-sun.is-faint,
 .forest-stars.is-faint {
-  filter: opacity(0.4);
+  opacity: 0.4;
 }
 
 /* 星（またたく） */
@@ -98,7 +98,6 @@
   left: 0;
   background-repeat: repeat-x;
   background-position: left bottom;
-  will-change: transform;
   animation-name: forest-scroll;
   animation-timing-function: linear;
   animation-iteration-count: infinite;

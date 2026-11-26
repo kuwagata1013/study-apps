@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { mix, sceneColors, type Scene } from './sceneTime';
-import { PX, TILE, createRandom, layersOf, toSvgUrl, type Scenery } from './scenery';
+import { PX, TILE, createRandom, layersOf, toPngUrl, type Scenery } from './scenery';
 import './ForestBackground.css';
 
 // キャラクター（ドット絵）に合わせた、ドット絵風の動く背景（景色の絵は scenery.ts）。
@@ -67,9 +67,9 @@ export const ForestBackground: React.FC<ForestBackgroundProps> = ({ moving, scen
   const art = layersOf(scenery);
   const layers = useMemo(
     () => [
-      { key: 'far', height: art.far.height, url: toSvgUrl(art.far, colors.far), speed: 8, bottom: 22 },
-      { key: 'mid', height: art.mid.height, url: toSvgUrl(art.mid, colors.mid), speed: 22, bottom: 14 },
-      { key: 'near', height: art.near.height, url: toSvgUrl(art.near, colors.near), speed: 60, bottom: 0 }
+      { key: 'far', height: art.far.height, url: toPngUrl(art.far, colors.far), speed: 8, bottom: 22 },
+      { key: 'mid', height: art.mid.height, url: toPngUrl(art.mid, colors.mid), speed: 22, bottom: 14 },
+      { key: 'near', height: art.near.height, url: toPngUrl(art.near, colors.near), speed: 60, bottom: 0 }
     ],
     [colors, art]
   );

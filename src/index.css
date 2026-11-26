@@ -33,9 +33,24 @@
 .bgm-eq.is-playing > span:nth-child(3) { animation-delay: -0.6s; }
 .bgm-eq.is-playing > span:nth-child(4) { animation-delay: -0.15s; }
 @keyframes bgm-eq {
-  0%, 100% { height: 4px; }
-  50% { height: 16px; }
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(4); }
 }
+.bgm-eq > span { transform-origin: bottom; }
 @media (prefers-reduced-motion: reduce) {
-  .bgm-eq.is-playing > span { animation: none; height: 12px; }
+  .bgm-eq.is-playing > span { animation: none; transform: scaleY(3); }
+}
+
+/* iPhone・iPad（Safari）では、すりガラスのぼかし（backdrop-filter）を使わない。
+   動き続ける景色や雨の上にぼかしを重ねると、描画が追いつかず画面がちらつくことがあるため。
+   どのパネルも背景を半透明より濃くしてあるので、ぼかしがなくても文字は読める */
+@supports (-webkit-touch-callout: none) {
+  .game-glass,
+  [class*='backdrop-blur'] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .game-glass {
+    background: rgba(49, 33, 23, 0.92);
+  }
 }

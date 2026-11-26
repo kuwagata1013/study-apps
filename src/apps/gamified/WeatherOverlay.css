@@ -8,13 +8,16 @@
 }
 .weather > span {
   position: absolute;
-  will-change: transform;
 }
 
-/* タイル（240px）1枚分だけ動かしてループする */
+/* タイル（240px）1枚分だけ動かしてループする。
+   はみ出させるのは上だけ（雪の横ゆれ分だけ左右も少し）。大きすぎる層は iPhone で描画が追いつかずちらつくため */
 .weather-rain > span,
 .weather-snow > span {
-  inset: -240px;
+  top: -240px;
+  bottom: 0;
+  left: -40px;
+  right: -40px;
   background-size: 240px 240px;
   image-rendering: pixelated;
 }
