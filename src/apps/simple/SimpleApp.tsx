@@ -27,6 +27,7 @@ import { useScreenTracking } from '../../lib/useResearchTracking';
 import { useBgm } from '../../lib/useBgm';
 import Equalizer from '../../components/Equalizer';
 import TimerFinishDialog from '../../components/TimerFinishDialog';
+import ContactForm from '../../components/ContactForm';
 import AlarmSettings from '../../components/AlarmSettings';
 import { startTicker } from '../../lib/ticker';
 import { fireAlarm, prepareAlarm, useKeepAwake } from '../../lib/timerAlarm';
@@ -702,6 +703,12 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
                 <RefreshCw size={16} />
                 モードを再選択する（スタート画面へ）
               </button>
+
+              <ContactForm
+                theme="light"
+                uid={user?.uid ?? null}
+                buttonClassName="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-gray-200"
+              />
 
               {user && (
                 <button

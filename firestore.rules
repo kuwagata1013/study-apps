@@ -330,6 +330,37 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // お問い合わせ。ログインした本人が送る。読めるのは管理者だけ（対応状況とメモの変更・削除も管理者だけ）
+    match /inquiries/{id} {
+      allow read, delete: if isAdmin();
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly([
+          'uid', 'participantId', 'playerName', 'deviceId', 'mode', 'category', 'message', 'status', 'userAgent', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll(['uid', 'mode', 'category', 'message', 'status', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && (!('participantId' in request.resource.data) || (request.resource.data.participantId is string
+          && request.resource.data.participantId.matches('^[A-Za-z0-9_-]{0,32}$')))
+        && (!('playerName' in request.resource.data) || (request.resource.data.playerName is string
+          && request.resource.data.playerName.size() <= 20))
+        && (!('deviceId' in request.resource.data) || (request.resource.data.deviceId is string
+          && request.resource.data.deviceId.size() <= 64))
+        && request.resource.data.mode in ['simple', 'gamified']
+        && request.resource.data.category in ['bug', 'usage', 'request', 'other']
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 1 && request.resource.data.message.size() <= 2000
+        && request.resource.data.status == 'open'
+        && (!('userAgent' in request.resource.data) || (request.resource.data.userAgent is string
+          && request.resource.data.userAgent.size() <= 512))
+        && request.resource.data.createdAt == request.time;
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'adminMemo', 'updatedAt'])
+        && request.resource.data.status in ['open', 'done']
+        && (!('adminMemo' in request.resource.data) || (request.resource.data.adminMemo is string
+          && request.resource.data.adminMemo.size() <= 1000))
+        && request.resource.data.updatedAt == request.time;
+    }
+
     // それ以外はすべて拒否
     match /{document=**} {
       allow read, write: if false;

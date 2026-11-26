@@ -59,6 +59,7 @@ import sitUrl from '../../assets/character/sit.png';
 import { BGM_TRACKS, bgmName, type BgmTrack } from './bgmTracks';
 import Equalizer from '../../components/Equalizer';
 import TimerFinishDialog from '../../components/TimerFinishDialog';
+import ContactForm from '../../components/ContactForm';
 import AlarmSettings from '../../components/AlarmSettings';
 import { startTicker } from '../../lib/ticker';
 import { fireAlarm, prepareAlarm, useKeepAwake } from '../../lib/timerAlarm';
@@ -1175,6 +1176,12 @@ export const GamifiedApp: React.FC<GamifiedAppProps> = ({
                         <RefreshCw size={16} />
                         モードを再選択する（スタート画面へ）
                       </button>
+
+                      <ContactForm
+                        theme="game"
+                        uid={uid}
+                        buttonClassName="w-full py-3 bg-[#1f140d] hover:bg-[#4a3424] text-white font-bold rounded-2xl transition text-xs flex items-center justify-center gap-2 border border-[#fdd69f]/15"
+                      />
 
                       {user && (
                         <button
