@@ -9,7 +9,14 @@ const ZERO_WEEK = [0, 0, 0, 0, 0, 0, 0];
 
 // 今日・今週の勉強時間（相手の記録が今日・今週のものでなければ 0）
 export const todayMinutesOf = (p: PlayerProfile) => (p.todayKey === dayKey(studyNow()) ? p.todayMinutes : 0);
-export const weekDaysOf = (p: PlayerProfile) => (p.weekKey === thisWeekDays([]).weekKey ? p.weekDays : ZERO_WEEK);
+// 今週の日ごと。古い版のアプリの人（今週の記録が届いていない）や、今週の分が今日の分より古いときも、
+// 今日の分は必ず今日の棒に入れる（「今日 1時間・今週 0分」のような食い違いを出さない）
+export const weekDaysOf = (p: PlayerProfile) => {
+  const { weekKey, todayIndex } = thisWeekDays([]);
+  const days = p.weekKey === weekKey ? [...p.weekDays] : [...ZERO_WEEK];
+  days[todayIndex] = Math.max(days[todayIndex] ?? 0, todayMinutesOf(p));
+  return days;
+};
 export const weekMinutesOf = (p: PlayerProfile) => weekDaysOf(p).reduce((a, b) => a + b, 0);
 export const minutesOf = (p: PlayerProfile, period: Period) => (period === 'today' ? todayMinutesOf(p) : weekMinutesOf(p));
 

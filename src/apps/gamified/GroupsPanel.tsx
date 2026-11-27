@@ -273,10 +273,15 @@ export const GroupsPanel: React.FC<{ uid: string; period: Period; onPeriodChange
                           </div>
                           <p className="text-[10px] text-white/60 text-right">
                             今日 <span className="font-bold text-white">{formatMinutes(todayTotal)}</span>
-                            <br />1人平均 {formatMinutes(list.length ? weekTotal / list.length : 0)}
+                            <br />今週の1人平均 {formatMinutes(list.length ? weekTotal / list.length : 0)}
                           </p>
                         </div>
                         <WeekBars days={weekSum} height={48} showValues />
+                        {list.some((p) => !p.weekKey) && (
+                          <p className="text-[10px] text-white/45 leading-snug">
+                            「未更新」の人は古い版のアプリを使っているため、今日より前の分がまだ入っていません（新しい版を開くと入ります）
+                          </p>
+                        )}
                       </div>
 
                       <div className="space-y-2">
