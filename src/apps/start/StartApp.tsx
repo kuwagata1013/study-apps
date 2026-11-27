@@ -16,9 +16,9 @@ import { showAlert, showConfirm } from '../../lib/dialog';
 
 const LOGIN_ERROR_TEXT: Record<LoginError, string> = {
   wrong: '参加者IDかパスワードがちがいます',
-  deleted: 'この参加者IDは使えなくなりました。先生（管理者）に確認してください',
+  deleted: 'この参加者IDは使えなくなりました。管理者に確認してください',
   too_many: '何度もまちがえたため、しばらくログインできません。少し待ってからお試しください',
-  disabled: 'このアカウントは使えません。先生（管理者）に確認してください',
+  disabled: 'このアカウントは使えません。管理者に確認してください',
   network: '通信できませんでした。インターネットにつながっているか確認してください',
   unknown: 'ログインできませんでした。もう一度お試しください'
 };

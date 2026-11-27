@@ -73,7 +73,7 @@ const ContactForm: React.FC<{ theme: 'game' | 'light'; uid: string | null; butto
                 <Check size={28} />
               </div>
               <p className="mt-3 text-sm font-bold">送信しました。ありがとうございます！</p>
-              <p className={`mt-1 text-xs ${s.sub}`}>内容は先生（管理者）が確認します。</p>
+              <p className={`mt-1 text-xs ${s.sub}`}>内容は管理者が確認します。</p>
               <button data-autofocus onClick={close} className={`mt-5 w-full py-3 text-sm font-black ${s.ok}`}>
                 閉じる
               </button>

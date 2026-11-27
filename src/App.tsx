@@ -35,8 +35,8 @@ type AppMode = 'start' | 'simple' | 'gamified' | 'admin';
 
 // 使えない参加者アカウントでログインしたときに、スタート画面に出す文
 const BLOCKED_LOGIN_TEXT: Record<Exclude<ParticipantLoginState, 'ok'>, string> = {
-  not_issued: 'この参加者IDは発行されていません。先生（管理者）に確認してください',
-  deleted: 'この参加者IDは使えなくなりました。先生（管理者）に確認してください',
+  not_issued: 'この参加者IDは発行されていません。管理者に確認してください',
+  deleted: 'この参加者IDは使えなくなりました。管理者に確認してください',
   replaced: 'パスワードが新しくなりました。新しいパスワードでログインしてください'
 };
 
